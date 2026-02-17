@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traefik Dashboard</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>Traefik Access Log Dashboard</h1>
+        <div class="time-filter">
+            <label>Zeitraum:</label>
+            <select id="hours-select" onchange="updateDashboard()">
+                <option value="1">Letzte Stunde</option>
+                <option value="6">Letzte 6 Stunden</option>
+                <option value="24" selected>Letzte 24 Stunden</option>
+                <option value="168">Letzte Woche</option>
+            </select>
+        </div>
+    </header>
+
+    <main>
+        <!-- Overview Stats -->
+        <section class="stats-overview" id="stats-overview">
+            <div class="stat-card">
+                <div class="stat-value" id="total-requests">-</div>
+                <div class="stat-label">Requests</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="unique-ips">-</div>
+                <div class="stat-label">Unique IPs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="error-rate">-</div>
+                <div class="stat-label">Error Rate</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="avg-duration">-</div>
+                <div class="stat-label">Avg Duration</div>
+            </div>
+            <div class="stat-card alert">
+                <div class="stat-value" id="intruder-count">-</div>
+                <div class="stat-label">Intruder Events</div>
+            </div>
+        </section>
+
+        <!-- Tab Navigation -->
+        <div class="tab-navigation">
+            <button class="tab-btn active" onclick="showTab('overview')">Übersicht</button>
+            <button class="tab-btn" onclick="showTab('ips')">Top IPs</button>
+            <button class="tab-btn" onclick="showTab('blocklist')">
+                Blocklist
+                <span class="tab-badge" id="blocklist-badge"></span>
+            </button>
+            <button class="tab-btn" onclick="showTab('intruders')">
+                Intruder Alerts
+                <span class="tab-badge" id="intruder-badge"></span>
+            </button>
+            <button class="tab-btn" onclick="showTab('logs')">
+                Live Logs
+                <span class="live-indicator" id="live-indicator"></span>
+            </button>
+        </div>
+
+        <!-- Tab: Übersicht -->
+        <div class="tab-content active" id="tab-overview">
+            <div class="dashboard-grid">
+                <section class="card">
+                    <h2>Requests pro Host</h2>
+                    <div id="hosts-list" class="services-list"></div>
+                </section>
+
+                <section class="card">
+                    <h2>Status Codes</h2>
+                    <div id="status-chart" class="status-chart"></div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Tab: Top IPs -->
+        <div class="tab-content" id="tab-ips">
+            <section class="card full-width">
+                <h2>Top IPs</h2>
+                <table id="top-ips-table" class="ip-security-table">
+                    <thead>
+                        <tr>
+                            <th>Land</th>
+                            <th>IP / Hostname</th>
+                            <th>Requests</th>
+                            <th>Erfolg</th>
+                            <th>Risiko</th>
+                            <th>Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </section>
+        </div>
+
+        <!-- Tab: Blocklist -->
+        <div class="tab-content" id="tab-blocklist">
+            <section class="card full-width">
+                <h2>🚫 Blockierte IPs & Ranges</h2>
+                <div class="blocklist-controls">
+                    <input type="text" id="block-ip-input" placeholder="IP oder CIDR (z.B. 192.168.1.0/24)" />
+                    <input type="text" id="block-reason-input" placeholder="Grund (optional)" />
+                    <button class="block-btn" onclick="manualBlockIP()">🚫 Blockieren</button>
+                </div>
+                <div class="blocklist-stats" id="blocklist-stats"></div>
+                <div id="blocklist" class="blocklist"></div>
+            </section>
+        </div>
+
+        <!-- Tab: Intruder Alerts -->
+        <div class="tab-content" id="tab-intruders">
+            <section class="card full-width alert-card">
+                <h2>Intruder Alerts</h2>
+                <div id="intruder-list" class="intruder-list"></div>
+            </section>
+        </div>
+
+        <!-- Tab: Live Logs -->
+        <div class="tab-content" id="tab-logs">
+            <section class="card full-width">
+                <h2>Letzte Requests</h2>
+                <table id="logs-table" class="logs-table">
+                    <thead>
+                        <tr>
+                            <th>Zeit</th>
+                            <th>Host</th>
+                            <th>IP / Hostname</th>
+                            <th>Method</th>
+                            <th>Path</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        let currentHours = 24;
+        let eventSource = null;
+        let currentTab = 'overview';
+
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById('tab-' + tabName).classList.add('active');
+            event.target.closest('.tab-btn').classList.add('active');
+            currentTab = tabName;
+        }
+
+        function getHours() {
+            return document.getElementById('hours-select').value;
+        }
+
+        async function fetchStats() {
+            const hours = getHours();
+            const response = await fetch(`/api/stats?hours=${hours}`);
+            const data = await response.json();
+
+            document.getElementById('total-requests').textContent = data.total_requests.toLocaleString();
+            document.getElementById('unique-ips').textContent = data.unique_ips.toLocaleString();
+            document.getElementById('error-rate').textContent = data.error_rate + '%';
+            document.getElementById('avg-duration').textContent = data.avg_duration_ms + 'ms';
+            document.getElementById('intruder-count').textContent = data.intruder_events;
+
+            // Update intruder badge in tab
+            const badge = document.getElementById('intruder-badge');
+            if (data.intruder_events > 0) {
+                badge.textContent = data.intruder_events;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        async function fetchHosts() {
+            const hours = getHours();
+            const response = await fetch(`/api/stats/hosts?hours=${hours}`);
+            const data = await response.json();
+
+            const container = document.getElementById('hosts-list');
+            if (data.length === 0) {
+                container.innerHTML = '<p class="empty">Keine Daten</p>';
+                return;
+            }
+
+            const maxRequests = Math.max(...data.map(s => s.requests));
+            container.innerHTML = data.map(s => {
+                // Extract subdomain from host (e.g., "app.example.com" -> "app")
+                const subdomain = s.host ? s.host.split('.')[0] : 'unknown';
+                return `
+                    <div class="service-item">
+                        <div class="service-name" title="${s.host}">${subdomain}</div>
+                        <div class="service-bar-container">
+                            <div class="service-bar" style="width: ${(s.requests / maxRequests * 100)}%"></div>
+                        </div>
+                        <div class="service-count">${s.requests.toLocaleString()}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function fetchTopIPs() {
+            const hours = getHours();
+            const response = await fetch(`/api/stats/ips?hours=${hours}`);
+            const data = await response.json();
+
+            const tbody = document.querySelector('#top-ips-table tbody');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty">Keine Daten</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(ip => {
+                const successRate = ip.requests > 0 ? Math.round(ip.success_count / ip.requests * 100) : 0;
+                const riskClass = ip.risk_level === 'high' ? 'risk-high' :
+                                  ip.risk_level === 'medium' ? 'risk-medium' : 'risk-low';
+                const reasons = ip.risk_reasons.length > 0 ? ip.risk_reasons.join(', ') : '';
+
+                return `
+                <tr class="${ip.is_blocked ? 'ip-blocked' : ''}">
+                    <td class="country-cell" title="${ip.country || ''}">
+                        <span class="country-flag">${ip.flag || ''}</span>
+                        <small class="country-code">${ip.country_code || ''}</small>
+                    </td>
+                    <td>
+                        <code>${ip.ip}</code>
+                        ${ip.hostname ? '<br><small class="hostname">' + ip.hostname + '</small>' : ''}
+                    </td>
+                    <td>
+                        <span class="request-count">${ip.requests.toLocaleString()}</span>
+                        <small class="path-count">${ip.unique_paths} Pfade</small>
+                    </td>
+                    <td>
+                        <span class="success-rate ${successRate > 80 ? 'good' : successRate < 30 ? 'bad' : ''}">${successRate}%</span>
+                        <small class="success-detail">${ip.success_count}/${ip.requests}</small>
+                    </td>
+                    <td>
+                        <span class="risk-badge ${riskClass}">${ip.risk_label}</span>
+                        ${reasons ? '<br><small class="risk-reasons">' + reasons + '</small>' : ''}
+                    </td>
+                    <td>
+                        ${ip.is_blocked ?
+                            '<span class="blocked-label">Blockiert</span>' :
+                            (ip.risk_level !== 'low' ?
+                                `<button class="block-btn-small" onclick="blockIP('${ip.ip}', this)">🚫</button>` :
+                                '-'
+                            )
+                        }
+                    </td>
+                </tr>
+            `}).join('');
+        }
+
+        async function fetchStatusCodes() {
+            const hours = getHours();
+            const response = await fetch(`/api/stats/status?hours=${hours}`);
+            const data = await response.json();
+
+            const container = document.getElementById('status-chart');
+            if (data.length === 0) {
+                container.innerHTML = '<p class="empty">Keine Daten</p>';
+                return;
+            }
+
+            const total = data.reduce((sum, s) => sum + s.count, 0);
+            container.innerHTML = data.map(s => {
+                const statusClass = s.status < 300 ? 'success' : s.status < 400 ? 'redirect' : s.status < 500 ? 'client-error' : 'server-error';
+                return `
+                    <div class="status-item ${statusClass}">
+                        <span class="status-code">${s.status}</span>
+                        <span class="status-count">${s.count.toLocaleString()}</span>
+                        <span class="status-percent">${(s.count / total * 100).toFixed(1)}%</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Cache for blocked IPs
+        let blockedIPsCache = new Set();
+
+        async function fetchBlockedIPs() {
+            try {
+                const response = await fetch('/api/blocklist');
+                const data = await response.json();
+                blockedIPsCache = new Set(data.map(b => b.ip));
+            } catch (e) {
+                console.error('Failed to fetch blocklist:', e);
+            }
+        }
+
+        async function fetchIntruders() {
+            const hours = getHours();
+
+            // Fetch blocklist first to know which IPs are blocked
+            await fetchBlockedIPs();
+
+            const response = await fetch(`/api/intruders?hours=${hours}&limit=20`);
+            const data = await response.json();
+
+            const container = document.getElementById('intruder-list');
+            if (data.length === 0) {
+                container.innerHTML = '<p class="empty">Keine Intruder-Events</p>';
+                return;
+            }
+
+            const reasonLabels = {
+                'suspicious_path': 'Suspicious Path',
+                'sql_injection': 'SQL Injection',
+                'rate_limit': 'Rate Limit',
+                'auth_failures': 'Auth Failures'
+            };
+
+            container.innerHTML = data.map(group => {
+                const isBlocked = blockedIPsCache.has(group.ip);
+                return `
+                <div class="intruder-group ${isBlocked ? 'intruder-blocked' : ''}" id="intruder-${group.ip.replace(/\./g, '-')}">
+                    <div class="intruder-group-header">
+                        <div class="intruder-ip-info">
+                            ${group.flag ? '<span class="country-flag" title="' + group.country + '">' + group.flag + '</span>' : ''}
+                            <code class="ip-address">${group.ip}</code>
+                            ${isBlocked ? '<span class="blocked-badge">BLOCKED</span>' : ''}
+                            ${group.hostname ? '<span class="hostname">' + group.hostname + '</span>' : ''}
+                            <span class="abuse-score-badge" id="abuse-${group.ip.replace(/\./g, '-')}"></span>
+                        </div>
+                        <div class="intruder-actions">
+                            <button class="check-abuse-btn" onclick="showAbuseInfo('${group.ip}', this)" title="AbuseIPDB prüfen">🔍</button>
+                            ${isBlocked ?
+                                '<span class="already-blocked">✓ Blockiert</span>' :
+                                `<button class="block-btn" onclick="blockIP('${group.ip}', this)" title="IP blockieren">🚫 Block</button>`
+                            }
+                            <span class="event-count">${group.event_count} Event${group.event_count > 1 ? 's' : ''}</span>
+                        </div>
+                    </div>
+                    <div class="intruder-hosts">
+                        ${group.hosts.map(h => '<span class="host-tag">' + h.split('.')[0] + '</span>').join('')}
+                    </div>
+                    <div class="intruder-reasons">
+                        ${group.reasons.map(r => '<span class="reason-tag">' + (reasonLabels[r] || r) + '</span>').join('')}
+                    </div>
+                    <div class="intruder-events">
+                        ${group.events.slice(0, 3).map(e => {
+                            const host = e.host ? e.host.split('.')[0] : '-';
+                            const statusClass = e.status_code === 200 ? 'status-danger' :
+                                               e.status_code === 404 ? 'status-ok' :
+                                               e.status_code === 403 ? 'status-ok' : '';
+                            return `
+                            <div class="intruder-event">
+                                <span class="event-time">${new Date(e.timestamp).toLocaleTimeString('de-DE')}</span>
+                                <span class="event-host">${host}</span>
+                                <span class="event-status ${statusClass}">${e.status_code || '-'}</span>
+                                <span class="event-details">${e.details ? e.details.substring(0, 80) : ''}</span>
+                            </div>
+                        `}).join('')}
+                        ${group.events.length > 3 ? '<div class="more-events">+ ' + (group.events.length - 3) + ' weitere</div>' : ''}
+                    </div>
+                    ${group.events[0].recommendation ? '<div class="group-recommendation">💡 ' + group.events[0].recommendation + '</div>' : ''}
+                </div>
+            `}).join('');
+        }
+
+        async function blockIP(ip, button, reason = null) {
+            // Build confirmation message with AbuseIPDB option
+            const reportToAbuse = confirm(
+                `IP ${ip} blockieren?\n\n` +
+                `[OK] = Blockieren + an AbuseIPDB melden\n` +
+                `[Abbrechen] = Nur blockieren (ohne Meldung)`
+            );
+
+            // If user cancels both, don't block
+            if (!confirm(`IP ${ip} wirklich blockieren?`)) return;
+
+            button.disabled = true;
+            button.textContent = '⏳';
+
+            try {
+                const blockReason = reason || 'Manual block from dashboard';
+                let url = `/api/blocklist?ip=${encodeURIComponent(ip)}&reason=${encodeURIComponent(blockReason)}`;
+                if (reportToAbuse) {
+                    url += '&report_abuse=true';
+                }
+
+                const response = await fetch(url, { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    let msg = '✓ Blocked';
+                    if (data.abuseipdb_report) {
+                        if (data.abuseipdb_report.success) {
+                            msg = '✓ Blocked + Reported';
+                        } else if (data.abuseipdb_report.error) {
+                            msg = '✓ Blocked (Report: ' + data.abuseipdb_report.error.substring(0, 20) + ')';
+                        }
+                    }
+                    button.textContent = msg;
+                    button.classList.add('blocked');
+                    fetchBlocklist();
+                } else {
+                    button.textContent = data.error || '❌ Fehler';
+                }
+            } catch (e) {
+                button.textContent = '❌ Fehler';
+                console.error('Block failed:', e);
+            }
+        }
+
+        async function checkAbuseIP(ip) {
+            try {
+                const response = await fetch(`/api/abuseipdb/check/${encodeURIComponent(ip)}`);
+                const data = await response.json();
+                return data;
+            } catch (e) {
+                console.error('AbuseIPDB check failed:', e);
+                return null;
+            }
+        }
+
+        async function showAbuseInfo(ip, button) {
+            button.disabled = true;
+            button.textContent = '⏳';
+
+            const data = await checkAbuseIP(ip);
+            const badgeId = 'abuse-' + ip.replace(/\./g, '-');
+            const badge = document.getElementById(badgeId);
+
+            if (data && !data.error) {
+                const score = data.abuse_score || 0;
+                const reports = data.total_reports || 0;
+                let badgeClass = 'abuse-low';
+                if (score >= 80) badgeClass = 'abuse-critical';
+                else if (score >= 50) badgeClass = 'abuse-high';
+                else if (score >= 25) badgeClass = 'abuse-medium';
+
+                badge.className = `abuse-score-badge ${badgeClass}`;
+                badge.innerHTML = `${score}% (${reports} Reports)`;
+                badge.title = `${data.recommendation}\nISP: ${data.isp || '-'}\nLand: ${data.country || '-'}`;
+
+                button.textContent = '🔍';
+                button.disabled = false;
+
+                // Show alert with details
+                alert(
+                    `AbuseIPDB Info für ${ip}:\n\n` +
+                    `Abuse Score: ${score}%\n` +
+                    `Meldungen: ${reports}\n` +
+                    `ISP: ${data.isp || '-'}\n` +
+                    `Land: ${data.country || '-'}\n` +
+                    `Tor Exit: ${data.is_tor ? 'Ja' : 'Nein'}\n\n` +
+                    `Empfehlung: ${data.recommendation || '-'}`
+                );
+            } else {
+                badge.className = 'abuse-score-badge';
+                badge.textContent = data?.error === 'rate_limited' ? '⏳' : '?';
+                button.textContent = '🔍';
+                button.disabled = false;
+
+                if (data?.error) {
+                    alert(`Fehler: ${data.error}`);
+                }
+            }
+        }
+
+        // Check AbuseIPDB status on load
+        let abuseIPDBConfigured = false;
+        async function checkAbuseIPDBStatus() {
+            try {
+                const response = await fetch('/api/abuseipdb/status');
+                const data = await response.json();
+                abuseIPDBConfigured = data.configured;
+                if (abuseIPDBConfigured) {
+                    console.log('AbuseIPDB integration active');
+                }
+            } catch (e) {
+                console.error('AbuseIPDB status check failed:', e);
+            }
+        }
+
+        async function unblockIP(ip) {
+            if (!confirm(`IP ${ip} wieder freigeben?`)) return;
+
+            try {
+                const response = await fetch(`/api/blocklist/${encodeURIComponent(ip)}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    fetchBlocklist();
+                    fetchIntruders();
+                }
+            } catch (e) {
+                console.error('Unblock failed:', e);
+            }
+        }
+
+        async function fetchBlocklist() {
+            const response = await fetch('/api/blocklist');
+            const data = await response.json();
+
+            // Update badge
+            const badge = document.getElementById('blocklist-badge');
+            if (badge) {
+                if (data.length > 0) {
+                    badge.textContent = data.length;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+
+            // Update stats
+            const statsEl = document.getElementById('blocklist-stats');
+            if (statsEl && data.length > 0) {
+                const cidrCount = data.filter(b => b.is_cidr || b.ip.includes('/')).length;
+                const permCount = data.filter(b => b.permanent).length;
+                const autoCount = data.filter(b => b.auto_blocked).length;
+                statsEl.innerHTML = `
+                    <span class="stat-mini">${data.length} Einträge</span>
+                    <span class="stat-mini">${cidrCount} CIDR</span>
+                    <span class="stat-mini">${permCount} Permanent</span>
+                    <span class="stat-mini">${autoCount} Auto</span>
+                `;
+            }
+
+            const container = document.getElementById('blocklist');
+            if (!container) return;
+
+            if (data.length === 0) {
+                container.innerHTML = '<p class="empty">Keine blockierten IPs</p>';
+                return;
+            }
+
+            container.innerHTML = data.map(b => {
+                const isCidr = b.is_cidr || b.ip.includes('/');
+                const typeLabel = isCidr ? '<span class="cidr-badge">CIDR</span>' : '';
+                const autoLabel = b.auto_blocked ? '<span class="auto-badge">Auto</span>' : '';
+                const permLabel = b.permanent ? '<span class="perm-badge">∞</span>' : '';
+                const expiresInfo = b.blocked_until ?
+                    `Bis: ${new Date(b.blocked_until).toLocaleString('de-DE')}` :
+                    'Permanent';
+                const scoreInfo = b.abuse_score ? `<span class="abuse-mini">${b.abuse_score}%</span>` : '';
+                const flagInfo = b.flag ? `<span class="country-flag" title="${b.country || ''}">${b.flag}</span>` : '';
+
+                return `
+                <div class="blocked-ip-item ${isCidr ? 'cidr-item' : ''}">
+                    <div class="blocked-ip-main">
+                        ${flagInfo}
+                        <code>${b.ip}</code>
+                        ${typeLabel}${autoLabel}${permLabel}${scoreInfo}
+                    </div>
+                    <span class="blocked-reason">${b.reason || '-'}</span>
+                    <span class="blocked-time" title="${expiresInfo}">${new Date(b.blocked_at).toLocaleString('de-DE')}</span>
+                    <button class="unblock-btn" onclick="unblockIP('${b.ip}')">Freigeben</button>
+                </div>
+            `}).join('');
+        }
+
+        async function manualBlockIP() {
+            const ipInput = document.getElementById('block-ip-input');
+            const reasonInput = document.getElementById('block-reason-input');
+            const ip = ipInput.value.trim();
+            const reason = reasonInput.value.trim();
+
+            if (!ip) {
+                alert('Bitte IP oder CIDR eingeben');
+                return;
+            }
+
+            const isCidr = ip.includes('/');
+
+            try {
+                let url = `/api/blocklist?ip=${encodeURIComponent(ip)}`;
+                if (reason) url += `&reason=${encodeURIComponent(reason)}`;
+                if (isCidr) url += '&is_cidr=true';
+
+                const response = await fetch(url, { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    ipInput.value = '';
+                    reasonInput.value = '';
+                    fetchBlocklist();
+                    alert(`${isCidr ? 'CIDR-Range' : 'IP'} ${ip} blockiert`);
+                } else {
+                    alert('Fehler: ' + (data.error || 'Unbekannt'));
+                }
+            } catch (e) {
+                alert('Fehler beim Blockieren');
+                console.error(e);
+            }
+        }
+
+        function formatHost(host) {
+            if (!host) return '-';
+            // Extract subdomain (e.g., "app.sub.example.com" -> "app.sub")
+            const parts = host.split('.');
+            if (parts.length > 2) {
+                return parts.slice(0, -2).join('.');
+            }
+            return host;
+        }
+
+        async function fetchRecentLogs() {
+            const response = await fetch('/api/logs/recent?limit=50');
+            const data = await response.json();
+
+            const tbody = document.querySelector('#logs-table tbody');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty">Keine Logs</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(log => {
+                const statusClass = log.status < 300 ? 'success' : log.status < 400 ? 'redirect' : log.status < 500 ? 'client-error' : 'server-error';
+                return `
+                    <tr>
+                        <td>${new Date(log.timestamp).toLocaleTimeString('de-DE')}</td>
+                        <td class="host-cell" title="${log.host || ''}">${formatHost(log.host)}</td>
+                        <td><code>${log.ip}</code>${log.hostname ? '<br><small class="hostname">' + log.hostname + '</small>' : ''}</td>
+                        <td>${log.method}</td>
+                        <td class="path-cell" title="${log.path}">${log.path}</td>
+                        <td class="${statusClass}">${log.status}</td>
+                        <td>${log.duration_ms}ms</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function startLiveUpdates() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            eventSource = new EventSource('/api/stream');
+            const indicator = document.getElementById('live-indicator');
+
+            eventSource.onopen = () => {
+                indicator.classList.add('active');
+            };
+
+            eventSource.onmessage = (event) => {
+                if (event.data.startsWith(':')) return;
+
+                try {
+                    const log = JSON.parse(event.data);
+                    const tbody = document.querySelector('#logs-table tbody');
+                    const statusClass = log.status < 300 ? 'success' : log.status < 400 ? 'redirect' : log.status < 500 ? 'client-error' : 'server-error';
+
+                    const row = document.createElement('tr');
+                    row.classList.add('new-row');
+                    row.innerHTML = `
+                        <td>${new Date(log.timestamp).toLocaleTimeString('de-DE')}</td>
+                        <td class="host-cell" title="${log.host || ''}">${formatHost(log.host)}</td>
+                        <td><code>${log.ip}</code>${log.hostname ? '<br><small class="hostname">' + log.hostname + '</small>' : ''}</td>
+                        <td>${log.method}</td>
+                        <td class="path-cell" title="${log.path}">${log.path}</td>
+                        <td class="${statusClass}">${log.status}</td>
+                        <td>${log.duration_ms}ms</td>
+                    `;
+
+                    tbody.insertBefore(row, tbody.firstChild);
+
+                    // Remove old rows
+                    while (tbody.children.length > 50) {
+                        tbody.removeChild(tbody.lastChild);
+                    }
+
+                    // Update stats periodically
+                    fetchStats();
+                } catch (e) {
+                    console.error('Failed to parse SSE data:', e);
+                }
+            };
+
+            eventSource.onerror = () => {
+                indicator.classList.remove('active');
+                setTimeout(startLiveUpdates, 5000);
+            };
+        }
+
+        function updateDashboard() {
+            fetchStats();
+            fetchHosts();
+            fetchTopIPs();
+            fetchStatusCodes();
+            fetchIntruders();
+            fetchRecentLogs();
+            fetchBlocklist();
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAbuseIPDBStatus();
+            updateDashboard();
+            startLiveUpdates();
+
+            // Refresh stats every 30 seconds
+            setInterval(updateDashboard, 30000);
+        });
+    </script>
+</body>
+</html>

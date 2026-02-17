@@ -1,0 +1,52 @@
+services:
+  traefik-sentinel:
+    build: .
+    container_name: traefik-sentinel
+    restart: unless-stopped
+    ports:
+      - "${PORT:-13923}:13923"
+    volumes:
+      - ./data:/app/data
+      # Mount your Traefik access log directory (read-only)
+      - ${TRAEFIK_LOG_DIR:-/var/log/traefik}:/logs:ro
+    environment:
+      - TZ=${TZ:-UTC}
+      - TRAEFIK_LOG_PATH=/logs/access.log
+      - DATABASE_PATH=/app/data/dashboard.db
+      # Telegram Alerts (optional)
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      # AbuseIPDB Integration (optional, get free API key at abuseipdb.com)
+      - ABUSEIPDB_API_KEY=${ABUSEIPDB_API_KEY:-}
+      - ABUSEIPDB_AUTO_REPORT=${ABUSEIPDB_AUTO_REPORT:-true}
+      # Intruder Detection Thresholds
+      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
+      - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
+      - AUTH_FAILURE_THRESHOLD=${AUTH_FAILURE_THRESHOLD:-10}
+      # Whitelisted IPs (comma-separated, no alerts for these)
+      - WHITELISTED_IPS=${WHITELISTED_IPS:-}
+      # Honeypot instant blocking
+      - HONEYPOT_INSTANT_BLOCK=${HONEYPOT_INSTANT_BLOCK:-true}
+      # Log retention (days)
+      - RETENTION_ACCESS_LOGS_DAYS=${RETENTION_ACCESS_LOGS_DAYS:-30}
+      - RETENTION_INTRUDER_EVENTS_DAYS=${RETENTION_INTRUDER_EVENTS_DAYS:-90}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:13923/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # Uncomment to use with Traefik reverse proxy:
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.sentinel.rule=Host(`sentinel.example.com`)"
+    #   - "traefik.http.routers.sentinel.entrypoints=websecure"
+    #   - "traefik.http.routers.sentinel.tls.certresolver=letsencrypt"
+    #   - "traefik.http.services.sentinel.loadbalancer.server.port=13923"
+    # networks:
+    #   - traefik
+
+# Uncomment if using Traefik network:
+# networks:
+#   traefik:
+#     external: true
