@@ -25,6 +25,8 @@ A lightweight security dashboard for Traefik access logs with real-time intruder
 
 ## Screenshots
 
+> **Note:** Screenshots show the German UI version. The application is now fully available in English.
+
 ### Overview
 ![Overview](screenshots/Overview.png)
 

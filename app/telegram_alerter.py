@@ -4,44 +4,95 @@ from datetime import datetime
 from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_ENABLED
 
 
+# Severity levels for different threat types
+THREAT_SEVERITY = {
+    "sql_injection": "critical",
+    "honeypot": "critical",
+    "auth_failures": "high",
+    "rate_limit": "medium",
+    "suspicious_path": "medium",
+}
+
+
+def get_severity_header(reason: str, event: dict) -> str:
+    """Generate severity-based alert header."""
+    severity = THREAT_SEVERITY.get(reason, "medium")
+    request_count = event.get("request_count", 1)
+
+    # Escalate severity based on request count
+    if request_count > 50:
+        severity = "critical"
+    elif request_count > 20 and severity == "medium":
+        severity = "high"
+
+    headers = {
+        "critical": "🔴🔴🔴 CRITICAL THREAT DETECTED 🔴🔴🔴",
+        "high": "🟠🟠 HIGH SEVERITY ALERT 🟠🟠",
+        "medium": "🟡 Security Alert",
+    }
+    return headers.get(severity, headers["medium"])
+
+
 async def send_telegram_alert(event: dict) -> bool:
     """Send an intrusion alert via Telegram."""
     if not TELEGRAM_ENABLED:
         return False
 
     reason_labels = {
-        "suspicious_path": "🔍 Suspicious Path",
-        "sql_injection": "💉 SQL Injection",
-        "rate_limit": "⚡ Rate Limit",
-        "auth_failures": "🔐 Auth Failures",
+        "suspicious_path": "🔍 Suspicious Path Scan",
+        "sql_injection": "💉 SQL INJECTION ATTACK",
+        "rate_limit": "⚡ Rate Limit Exceeded",
+        "auth_failures": "🔐 Brute Force Attempt",
+        "honeypot": "🍯 HONEYPOT TRIGGERED",
     }
 
     reason = event.get("reason", "unknown")
     label = reason_labels.get(reason, reason)
     timestamp = event.get("timestamp", datetime.utcnow())
     if isinstance(timestamp, datetime):
-        timestamp = timestamp.strftime("%d.%m.%Y %H:%M:%S")
+        timestamp = timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
 
     status_code = event.get("status_code", "-")
     host = event.get("host", "-")
     recommendation = event.get("recommendation", "")
+    request_count = event.get("request_count", 1)
 
-    message = (
-        f"<b>🚨 Traefik Intruder Alert</b>\n"
-        f"{'─' * 25}\n\n"
-        f"<b>Type:</b> {label}\n"
-        f"<b>IP:</b> <code>{event.get('ip', 'unknown')}</code>\n"
-        f"<b>Host:</b> {host}\n"
-        f"<b>Status:</b> {status_code}\n"
-        f"<b>Time:</b> {timestamp}\n"
-        f"<b>Details:</b> {event.get('details', 'N/A')}\n"
-    )
+    # Get severity header
+    header = get_severity_header(reason, event)
 
-    if event.get("request_count"):
-        message += f"<b>Requests:</b> {event['request_count']}\n"
+    # Build message with threat-appropriate urgency
+    message = f"<b>{header}</b>\n"
+    message += f"{'═' * 30}\n\n"
+
+    message += f"<b>🎯 Threat Type:</b> {label}\n"
+    message += f"<b>🌐 Attacker IP:</b> <code>{event.get('ip', 'unknown')}</code>\n"
+
+    if event.get("country"):
+        message += f"<b>📍 Location:</b> {event.get('flag', '')} {event.get('country', 'Unknown')}\n"
+
+    message += f"<b>🎪 Target Host:</b> {host}\n"
+    message += f"<b>📊 Status Code:</b> {status_code}\n"
+    message += f"<b>🕐 Time:</b> {timestamp}\n"
+
+    if request_count > 1:
+        message += f"<b>📈 Request Count:</b> <b>{request_count}</b>\n"
+
+    message += f"\n<b>📝 Details:</b>\n<code>{event.get('details', 'N/A')}</code>\n"
+
+    # Add blocking status
+    if event.get("auto_blocked"):
+        message += f"\n<b>✅ ACTION TAKEN:</b> IP automatically blocked\n"
+    elif event.get("is_blocked"):
+        message += f"\n<b>ℹ️ Status:</b> IP already blocked\n"
 
     if recommendation:
-        message += f"\n<b>💡 Empfehlung:</b>\n<i>{recommendation}</i>\n"
+        message += f"\n<b>💡 Recommendation:</b>\n<i>{recommendation}</i>\n"
+
+    # Add footer for critical threats
+    severity = THREAT_SEVERITY.get(reason, "medium")
+    if severity == "critical" or request_count > 20:
+        message += f"\n{'─' * 30}\n"
+        message += f"<i>⚠️ Immediate review recommended</i>"
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
