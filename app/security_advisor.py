@@ -5,40 +5,44 @@ import re
 # Recommendations by attack type
 RECOMMENDATIONS = {
     "suspicious_path": {
-        "default": "Automatisierter Scanner. Keine Aktion nötig wenn Status 404. Bei Status 200: Prüfen ob sensible Dateien exponiert sind.",
+        "default": "Automated scanner. No action needed if status 404. If status 200: Check if sensitive files are exposed.",
         "patterns": {
-            r"\.env": "⚠️ .env-Zugriff! Sicherstellen dass keine .env-Dateien im Web-Root liegen. In nginx: `location ~ /\\. { deny all; }`",
-            r"\.git": "⚠️ Git-Repository-Scan! .git-Ordner dürfen nicht öffentlich sein. Bei Status 200: Secrets rotieren! Nginx: `location ~ /\\.git { deny all; }`",
-            r"wp-login|wp-admin|wp-content": "WordPress-Scanner. Ignorieren wenn kein WordPress installiert. Sonst: Login-URL ändern, Fail2Ban für wp-login.",
-            r"phpmyadmin|pma": "phpMyAdmin-Scanner. Ignorieren wenn nicht installiert. Sonst: Zugriff auf IP beschränken oder entfernen.",
-            r"config\.php|config\.yml": "Config-Datei-Scan. Sicherstellen dass Konfigurationsdateien nicht im Web-Root liegen.",
-            r"shell|backdoor|c99|r57": "Webshell-Scanner. Keine Aktion nötig wenn Status 404.",
+            r"\.env": "⚠️ .env access attempt! Ensure no .env files are in web root. Nginx: `location ~ /\\. { deny all; }`",
+            r"\.git": "⚠️ Git repository scan! .git folders must not be public. If status 200: Rotate secrets! Nginx: `location ~ /\\.git { deny all; }`",
+            r"wp-login|wp-admin|wp-content": "WordPress scanner. Ignore if no WordPress installed. Otherwise: Change login URL, set up Fail2Ban for wp-login.",
+            r"phpmyadmin|pma": "phpMyAdmin scanner. Ignore if not installed. Otherwise: Restrict access by IP or remove.",
+            r"config\.php|config\.yml": "Config file scan. Ensure configuration files are not in web root.",
+            r"shell|backdoor|c99|r57": "Webshell scanner. No action needed if status 404.",
         }
     },
     "sql_injection": {
-        "default": "SQL-Injection Versuch. Sicherstellen dass alle DB-Queries parametrisiert sind. WAF-Regel für SQL-Patterns empfohlen.",
+        "default": "SQL injection attempt. Ensure all DB queries use parameterized statements. WAF rule for SQL patterns recommended.",
         "patterns": {
-            r"union.*select": "UNION-based SQLi. Bei dynamischen Queries: Prepared Statements verwenden.",
-            r"or\s+1\s*=\s*1": "Boolean-based SQLi. Input-Validierung und Prepared Statements prüfen.",
+            r"union.*select": "UNION-based SQLi. Use prepared statements for dynamic queries.",
+            r"or\s+1\s*=\s*1": "Boolean-based SQLi. Check input validation and use prepared statements.",
         }
     },
     "rate_limit": {
-        "default": "Zu viele Requests von dieser IP. Möglicher Bot/Scraper oder DDoS. Bei Bedarf IP temporär blockieren.",
+        "default": "Too many requests from this IP. Possible bot/scraper or DDoS. Consider temporarily blocking IP.",
         "patterns": {}
     },
     "auth_failures": {
-        "default": "Mehrfache Login-Fehlversuche. Möglicher Brute-Force. Fail2Ban empfohlen: `failregex = ^<HOST>.*401`",
+        "default": "Multiple login failures. Possible brute-force attack. Fail2Ban recommended: `failregex = ^<HOST>.*401`",
+        "patterns": {}
+    },
+    "honeypot": {
+        "default": "Honeypot path triggered. IP automatically blocked. Known malicious scanning activity.",
         "patterns": {}
     },
 }
 
 # Status code specific advice
 STATUS_ADVICE = {
-    200: "⚠️ KRITISCH: Ressource wurde ausgeliefert! Sofort prüfen ob sensible Daten geleakt wurden.",
-    403: "✓ Zugriff verweigert - korrekt konfiguriert.",
-    404: "✓ Ressource nicht gefunden - kein Handlungsbedarf.",
-    401: "Authentifizierung erforderlich - Login-Versuch fehlgeschlagen.",
-    500: "Server-Fehler bei Anfrage - Logs prüfen.",
+    200: "⚠️ CRITICAL: Resource was served! Immediately check if sensitive data was leaked.",
+    403: "✓ Access denied - correctly configured.",
+    404: "✓ Resource not found - no action needed.",
+    401: "Authentication required - login attempt failed.",
+    500: "Server error on request - check logs.",
 }
 
 
@@ -49,7 +53,7 @@ def get_recommendation(event: dict) -> str:
     status_code = event.get("status_code")
 
     # Get base recommendation for this reason
-    reason_config = RECOMMENDATIONS.get(reason, {"default": "Unbekannter Angriffstyp.", "patterns": {}})
+    reason_config = RECOMMENDATIONS.get(reason, {"default": "Unknown attack type.", "patterns": {}})
     recommendation = reason_config["default"]
 
     # Check for specific patterns in details

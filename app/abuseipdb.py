@@ -133,19 +133,19 @@ async def report_ip(
                 }
 
             elif response.status_code == 429:
-                return {"error": "Rate limit erreicht. Bitte später erneut versuchen."}
+                return {"error": "Rate limit reached. Please try again later."}
 
             elif response.status_code == 422:
                 error_detail = response.json().get("errors", [{}])[0].get("detail", "")
                 if "already reported" in error_detail.lower():
-                    return {"error": "IP wurde bereits kürzlich gemeldet (15 Min Cooldown)"}
-                return {"error": f"Validierungsfehler: {error_detail}"}
+                    return {"error": "IP was already reported recently (15 min cooldown)"}
+                return {"error": f"Validation error: {error_detail}"}
 
             else:
-                return {"error": f"API Fehler: {response.status_code}"}
+                return {"error": f"API error: {response.status_code}"}
 
     except Exception as e:
-        return {"error": f"Verbindungsfehler: {str(e)}"}
+        return {"error": f"Connection error: {str(e)}"}
 
 
 def get_risk_assessment(abuse_score: int) -> tuple[str, str]:
@@ -154,15 +154,15 @@ def get_risk_assessment(abuse_score: int) -> tuple[str, str]:
     Returns (risk_level, recommendation)
     """
     if abuse_score >= 80:
-        return "critical", "Bekannter Angreifer - sofort blockieren!"
+        return "critical", "Known attacker - block immediately!"
     elif abuse_score >= 50:
-        return "high", "Häufig gemeldet - Blockieren empfohlen"
+        return "high", "Frequently reported - blocking recommended"
     elif abuse_score >= 25:
-        return "medium", "Vereinzelt gemeldet - beobachten"
+        return "medium", "Occasionally reported - monitor"
     elif abuse_score > 0:
-        return "low", "Wenige Meldungen"
+        return "low", "Few reports"
     else:
-        return "none", "Keine Meldungen bekannt"
+        return "none", "No reports known"
 
 
 def build_report_comment(intruder_data: dict) -> str:

@@ -200,25 +200,25 @@ async def get_top_ips(hours: int = Query(default=24, ge=1, le=168), limit: int =
             error_rate = (client_err / total * 100) if total > 0 else 0
             if error_rate > 50:
                 risk_score += 2
-                risk_reasons.append(f"{error_rate:.0f}% Fehler")
+                risk_reasons.append(f"{error_rate:.0f}% errors")
 
             # Intruder events are very suspicious
             if intruder_events > 0:
                 risk_score += min(intruder_events, 3)
-                risk_reasons.append(f"{intruder_events} Alert{'s' if intruder_events > 1 else ''}")
+                risk_reasons.append(f"{intruder_events} alert{'s' if intruder_events > 1 else ''}")
 
             # Many unique paths with few successes = scanning
             if r.unique_paths > 10 and success < 5:
                 risk_score += 2
-                risk_reasons.append("Scanner-Verhalten")
+                risk_reasons.append("Scanner behavior")
 
             # Determine risk level
             if risk_score >= 4:
                 risk_level = "high"
-                risk_label = "Hohes Risiko"
+                risk_label = "High Risk"
             elif risk_score >= 2:
                 risk_level = "medium"
-                risk_label = "Verdächtig"
+                risk_label = "Suspicious"
             else:
                 risk_level = "low"
                 risk_label = "Normal"

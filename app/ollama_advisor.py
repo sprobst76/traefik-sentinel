@@ -14,22 +14,23 @@ def get_security_recommendation(event: dict) -> str:
     host = event.get("host", "unknown")
 
     reason_labels = {
-        "suspicious_path": "Verdächtiger Pfad-Zugriff (Scanner/Bot)",
-        "sql_injection": "SQL-Injection Versuch",
-        "rate_limit": "Rate-Limit überschritten (möglicher DDoS/Brute-Force)",
-        "auth_failures": "Mehrfache Authentifizierungsfehler (möglicher Brute-Force)",
+        "suspicious_path": "Suspicious path access (scanner/bot)",
+        "sql_injection": "SQL injection attempt",
+        "rate_limit": "Rate limit exceeded (possible DDoS/brute-force)",
+        "auth_failures": "Multiple authentication failures (possible brute-force)",
+        "honeypot": "Honeypot path triggered",
     }
     reason_text = reason_labels.get(reason, reason)
 
-    prompt = f"""Du bist ein IT-Security-Experte für Webserver-Absicherung. Ein Angreifer hat folgende verdächtige Aktivität ausgeführt. Gib eine kurze DEFENSIVE Empfehlung (1-2 Sätze) wie der Server-Admin sich schützen kann.
+    prompt = f"""You are an IT security expert for web server hardening. An attacker has performed the following suspicious activity. Provide a brief DEFENSIVE recommendation (1-2 sentences) on how the server admin can protect themselves.
 
-Angriffstyp: {reason_text}
-Angreifer-IP: {ip}
-Ziel-Host: {host}
-HTTP-Status: {status_code}
+Attack type: {reason_text}
+Attacker IP: {ip}
+Target host: {host}
+HTTP status: {status_code}
 Details: {details}
 
-Antworte NUR mit der Schutzempfehlung, ohne Einleitung. Beispiele: IP blockieren, Fail2Ban konfigurieren, WAF-Regel hinzufügen, etc."""
+Reply ONLY with the protection recommendation, without introduction. Examples: Block IP, configure Fail2Ban, add WAF rule, etc."""
 
     try:
         with httpx.Client(timeout=60.0) as client:
