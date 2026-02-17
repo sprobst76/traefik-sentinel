@@ -3,7 +3,7 @@ from pathlib import Path
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent
-LOG_PATH = os.getenv("TRAEFIK_LOG_PATH", "/srv/ai-lab/logs/traefik/access.log")
+LOG_PATH = os.getenv("TRAEFIK_LOG_PATH", "/var/log/traefik/access.log")
 DATABASE_PATH = os.getenv("DATABASE_PATH", str(BASE_DIR / "data" / "dashboard.db"))
 
 # Server
