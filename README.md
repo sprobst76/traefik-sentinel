@@ -25,7 +25,20 @@ A lightweight security dashboard for Traefik access logs with real-time intruder
 
 ## Screenshots
 
-*Screenshots will be added soon*
+### Overview
+![Overview](screenshots/Overview.png)
+
+### Top IPs with GeoIP & Risk Assessment
+![Top IPs](screenshots/TopIps.png)
+
+### Intruder Alerts
+![Intruder Alerts](screenshots/IntruderAletrs.png)
+
+### IP Blocklist
+![Blocklist](screenshots/Blocklist.png)
+
+### Live Logs
+![Live Logs](screenshots/LiveLogs.png)
 
 ## Quick Start
 
