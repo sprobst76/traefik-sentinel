@@ -26,11 +26,11 @@ Detect and block malicious traffic automatically while keeping the operator info
 
 ### Active
 
-- [ ] Smart Telegram alerting: only critical threats trigger immediate alerts
-- [ ] Daily digest: summary message with blocked IPs count, attack types, top attackers, traffic overview
-- [ ] Digest sends only when there is activity to report (no empty digests)
-- [ ] Configurable alert severity threshold via environment variable
-- [ ] Configurable digest schedule via environment variable
+- [x] Smart Telegram alerting: only critical threats trigger immediate alerts — Validated Phase 1
+- [x] Daily digest: summary — Validated Phase 2
+- [x] Digest sends only when there is activity — Validated Phase 2
+- [x] Configurable alert severity threshold via ALERT_MIN_SEVERITY — Validated Phase 1
+- [x] Configurable digest schedule via DIGEST_HOUR/DIGEST_ENABLED — Validated Phase 3
 
 ### Out of Scope
 
