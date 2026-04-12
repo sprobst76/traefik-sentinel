@@ -753,8 +753,8 @@ async def retention_cleanup(dry_run: bool = False):
             try:
                 from sqlalchemy import text
                 db.execute(text("VACUUM"))
-            except:
-                pass  # VACUUM may fail in some contexts, that's ok
+            except Exception:
+                pass  # VACUUM may fail in some contexts (e.g., active read transaction), that's ok
 
         results["dry_run"] = dry_run
         results["success"] = True
