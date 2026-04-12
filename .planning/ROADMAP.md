@@ -43,9 +43,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Attacker-controlled content (IPs, paths, user agents) in the digest is HTML-escaped and does not break Telegram HTML parse mode
   4. Calling the digest sender when zero events have occurred since the last send produces no Telegram message
 **Plans**: 3 plans
-- [ ] 02-01-PLAN.md — app/digest.py module: aggregation, HTML-escaped message build, UTF-16 truncation, send_digest entry + test scaffold
-- [ ] 02-02-PLAN.md — POST /api/digest/send manual-trigger endpoint
-- [ ] 02-03-PLAN.md — GET /api/digest/preview dry-run endpoint for UAT
+- [x] 02-01-PLAN.md — app/digest.py module: aggregation, HTML-escaped message build, UTF-16 truncation, send_digest entry + test scaffold
+- [x] 02-02-PLAN.md — POST /api/digest/send manual-trigger endpoint
+- [x] 02-03-PLAN.md — GET /api/digest/preview dry-run endpoint for UAT
 
 ### Phase 3: Scheduler and Integration
 **Goal**: The daily digest sends automatically at a configurable wall-clock time, starts and stops cleanly with the FastAPI application, and uses correct timezone-aware scheduling
