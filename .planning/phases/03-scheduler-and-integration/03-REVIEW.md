@@ -1,6 +1,6 @@
 ---
 phase: 03-scheduler-and-integration
-reviewed: 2026-04-12T00:00:00Z
+reviewed: 2026-04-12T18:51:31Z
 depth: standard
 files_reviewed: 6
 files_reviewed_list:
@@ -11,136 +11,138 @@ files_reviewed_list:
   - .env.example
   - tests/test_scheduler.py
 findings:
-  critical: 1
+  critical: 0
   warning: 3
-  info: 3
-  total: 7
+  info: 2
+  total: 5
 status: issues_found
 ---
 
 # Phase 03: Code Review Report
 
-**Reviewed:** 2026-04-12T00:00:00Z
+**Reviewed:** 2026-04-12T18:51:31Z
 **Depth:** standard
 **Files Reviewed:** 6
 **Status:** issues_found
 
 ## Summary
 
-This review covers the digest scheduler implementation (`app/scheduler.py`), its wiring into the FastAPI lifespan (`app/main.py`), new config knobs (`app/config.py`), compose/env updates, and the scheduler test suite.
+This review covers the daily digest scheduler (`app/scheduler.py`), its lifespan wiring (`app/main.py`), new config knobs (`app/config.py`), compose and env documentation, and the scheduler test suite.
 
-The scheduler logic itself is clean: it uses timezone-aware `datetime.now(UTC)`, correctly propagates `CancelledError`, and the next-fire calculation is correct. The lifespan shutdown sequence is well-structured.
+The Phase 3 scheduler implementation itself is correct. `app/scheduler.py` uses `datetime.now(UTC)` throughout, never `utcnow()`. `CancelledError` propagates cleanly from `asyncio.sleep` without being caught inside `digest_scheduler`. The lifespan shutdown block correctly cancels the task and suppresses the resulting `CancelledError` once. The `_seconds_until_next_fire` next-fire calculation and miss-policy (tomorrow if the hour has already passed today) are both correct.
 
-Two issues are significant enough to require attention before shipping. The `json` module is used in `app/main.py` (line 811) without ever being imported — this is a runtime `NameError` that will crash the SSE stream endpoint for every connected client. Separately, the test for `_seconds_until_next_fire` when patching `datetime` has a subtle mocking gap that causes the tests to pass for the wrong reason. Three lower-severity findings round out the review.
+The test suite is well-structured. The mock pattern in `test_seconds_until_next_fire_points_to_tomorrow_when_past` and `test_seconds_until_next_fire_points_to_today_when_future` is valid: `mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)` combined with `mock_dt.now.return_value = fake_now` ensures all arithmetic operates on real `datetime` objects. `timedelta` is imported separately in the scheduler module and is unaffected by the `datetime` patch.
 
----
-
-## Critical Issues
-
-### CR-01: `json` module used but never imported in `app/main.py`
-
-**File:** `app/main.py:811`
-**Issue:** `json.dumps(data)` is called inside the `event_generator()` generator of the `/api/stream` SSE endpoint, but `json` is not listed in `app/main.py`'s imports (lines 1-16). Every `await asyncio.wait_for(queue.get(), timeout=30.0)` success branch will raise `NameError: name 'json' is not defined`, silently terminating the SSE stream for the connected client. The endpoint itself does not return a 500 — the generator just stops, leaving clients with a stale connection.
-
-**Fix:**
-```python
-# Add to the import block at the top of app/main.py (after line 1 or grouped with stdlib)
-import json
-```
+Three warnings require operator attention: `datetime.utcnow()` is used in ten places in `main.py` producing UTC-naive datetimes inconsistent with the timezone-aware approach required by SCHED-05; a default-value mismatch for `RATE_LIMIT_REQUESTS` between `config.py` (500) and `docker-compose.yml` (100) means the effective default depends on the deploy path; and `RETENTION_BLOCKED_IPS_INACTIVE_DAYS` is absent from `docker-compose.yml`'s environment block, silently discarding any operator setting.
 
 ---
 
 ## Warnings
 
-### WR-01: `datetime` mock in scheduler tests does not patch `timedelta` — tests pass for wrong reason
+### WR-01: `datetime.utcnow()` used in ten places in `app/main.py` — produces UTC-naive datetimes inconsistent with SCHED-05
 
-**File:** `tests/test_scheduler.py:35-41` and `tests/test_scheduler.py:49-57`
-**Issue:** `test_seconds_until_next_fire_points_to_tomorrow_when_past` and `test_seconds_until_next_fire_points_to_today_when_future` both patch `app.scheduler.datetime` with a `MagicMock`, replacing it entirely. Inside `_seconds_until_next_fire`, the expression `target += timedelta(days=1)` still resolves to `timedelta` from the real `datetime` module import (`from datetime import datetime, timedelta`). However, `now.replace(...)` calls `mock_dt.now.return_value.replace(...)`, and arithmetic on the mock return value (`target <= now`, `target - now`) operates on `MagicMock` objects, not real `datetime` objects. The tests happen to pass because mock comparisons don't raise exceptions, but they are not actually verifying the computed seconds against a real datetime calculation. A future refactor that changes the comparison logic could silently regress.
+**File:** `app/main.py:65, 106, 136, 167, 266, 312, 660, 661, 662, 718`
+**Issue:** All database time-window filters and retention cutoffs in `main.py` use `datetime.utcnow()`, which returns a UTC-naive `datetime` (no `tzinfo`). The project convention established by SCHED-05 requires `datetime.now(ZoneInfo("UTC"))` (timezone-aware). If SQLite timestamps are ever stored or compared as timezone-aware values — or if the project migrates toward timezone-aware storage — these calls will produce incorrect comparisons. The inconsistency also makes the codebase harder to reason about: `scheduler.py` is explicit about UTC while `main.py` relies on the deprecated shorthand.
 
-**Fix:** Patch only `app.scheduler.datetime.now` rather than the entire `datetime` class, so `timedelta` and `.replace()` continue to operate on real `datetime` objects:
+Representative example (`app/main.py:65`):
 ```python
-with patch("app.scheduler.datetime") as mock_dt:
-    # Ensure replace() and arithmetic work on real datetime objects
-    mock_dt.now.return_value = fake_now
-    mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)  # passthrough constructor
-    result = _seconds_until_next_fire(8)
-```
-Or, more robustly, freeze time with `freezegun` or patch only `app.scheduler.datetime.now`:
-```python
-with patch("app.scheduler.datetime") as mock_dt:
-    mock_dt.now.return_value = fake_now
-    mock_dt.now.side_effect = None
-    # but timedelta must still be accessible — prefer freezegun for this pattern
+since = datetime.utcnow() - timedelta(hours=hours)
 ```
 
-### WR-02: Bare `except:` on `VACUUM` silently swallows all errors including `KeyboardInterrupt`
-
-**File:** `app/main.py:755-756`
-**Issue:** The `VACUUM` fallback uses a bare `except:` (no exception type), which catches `KeyboardInterrupt`, `SystemExit`, and `GeneratorExit` in addition to database errors. This can prevent clean shutdown in edge cases.
+**Fix:** Replace all occurrences with the timezone-aware form. Add `ZoneInfo` to the import block and update each call:
 ```python
-except:
-    pass  # VACUUM may fail in some contexts, that's ok
+# Add to imports (app/main.py top)
+from zoneinfo import ZoneInfo
+_UTC = ZoneInfo("UTC")
+
+# Replace each datetime.utcnow() with:
+since = datetime.now(_UTC).replace(tzinfo=None)  # keep naive for SQLite compat
+# or, if moving fully to aware datetimes:
+since = datetime.now(_UTC)
 ```
-**Fix:**
+If keeping SQLite timestamps naive, the safest short-term fix is:
 ```python
-except Exception:
-    pass  # VACUUM may fail in some contexts (e.g., active read transaction), that's ok
+since = datetime.now(ZoneInfo("UTC")).replace(tzinfo=None)
 ```
+This preserves the naive-datetime contract for SQLAlchemy while eliminating the deprecated call.
 
-### WR-03: Duplicate environment variable declarations in `docker-compose.yml` and `.env.example`
+---
 
-**File:** `docker-compose.yml:31-38` and `.env.example:65-101`
-**Issue:** `DIGEST_ENABLED` and `DIGEST_HOUR` are declared twice each in both files. In `docker-compose.yml`, lines 31-32 and 37-38 are identical. In `.env.example`, the entire "DIGEST SCHEDULING" section (lines 65-76) is copy-pasted verbatim at lines 89-101 under a different heading. This is not a runtime bug (last declaration wins in compose, duplicate keys in `.env` are typically ignored by `python-dotenv` with the first value winning), but it creates operator confusion about which declaration is authoritative and could lead to one copy being updated while the other is not.
+### WR-02: `RATE_LIMIT_REQUESTS` default is 500 in `config.py` but 100 in `docker-compose.yml` and `.env.example` — effective default depends on deploy path
 
-**Fix:** Remove the duplicate block. In `docker-compose.yml`, delete lines 36-38. In `.env.example`, delete the second "DIGEST SCHEDULING" section (lines 88-101).
+**File:** `app/config.py:29` and `docker-compose.yml:23` and `.env.example:36`
+**Issue:** `config.py` declares:
+```python
+RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "500"))
+```
+But `docker-compose.yml` injects:
+```yaml
+- RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
+```
+When an operator runs `docker compose up` without a `.env` file or without setting `RATE_LIMIT_REQUESTS`, the compose fallback `:-100` wins and the container sees `RATE_LIMIT_REQUESTS=100`, not 500. The Python fallback of 500 is unreachable in a compose-based deploy. This creates two different effective defaults depending on whether the application is started via `docker compose` or directly with `python -m uvicorn`, making the comment `# Higher for normal web usage` misleading.
+
+**Fix:** Align the defaults. Decide which value (100 or 500) is correct and update both files:
+```python
+# app/config.py — if 100 is correct:
+RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
+```
+```yaml
+# docker-compose.yml — if 500 is correct:
+- RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-500}
+```
+Also update `.env.example` to match whichever value is chosen.
+
+---
+
+### WR-03: `RETENTION_BLOCKED_IPS_INACTIVE_DAYS` missing from `docker-compose.yml` environment block — operator setting silently ignored
+
+**File:** `docker-compose.yml:34-35` (after `RETENTION_INTRUDER_EVENTS_DAYS`)
+**Issue:** `RETENTION_BLOCKED_IPS_INACTIVE_DAYS` is defined in `config.py` (line 142, default 180), used in two retention endpoints in `main.py` (lines 662 and 672), and documented in `.env.example` (line 60). However, it is not listed in `docker-compose.yml`'s `environment:` block. If an operator sets `RETENTION_BLOCKED_IPS_INACTIVE_DAYS=30` in their `.env` file and deploys via `docker compose`, the variable is not forwarded to the container and the code silently uses the 180-day default regardless.
+
+**Fix:** Add the missing environment passthrough to `docker-compose.yml`:
+```yaml
+      - RETENTION_BLOCKED_IPS_INACTIVE_DAYS=${RETENTION_BLOCKED_IPS_INACTIVE_DAYS:-180}
+```
+Place it immediately after the `RETENTION_INTRUDER_EVENTS_DAYS` line for grouping consistency.
 
 ---
 
 ## Info
 
-### IN-01: `test_no_utcnow_in_scheduler_source` uses a relative path — fails when pytest is not run from project root
+### IN-01: `test_no_utcnow_in_scheduler_source` uses a relative path — breaks when pytest is invoked outside project root
 
-**File:** `tests/test_scheduler.py:89`
-**Issue:** `pathlib.Path("app/scheduler.py").read_text()` uses a relative path. If pytest is invoked from any directory other than the project root (e.g., `pytest tests/` from inside `tests/`), this raises `FileNotFoundError` and the test fails with an uninformative error rather than the intended assertion.
+**File:** `tests/test_scheduler.py:93`
+**Issue:** `pathlib.Path("app/scheduler.py").read_text()` resolves relative to the working directory at test execution time. If pytest is run from `tests/` (`cd tests && pytest`) or from any other directory that is not the project root, this raises `FileNotFoundError` and the test fails with an uninformative error rather than the intended assertion message.
 
-**Fix:**
+**Fix:** Use `__file__` to anchor the path:
 ```python
-import pathlib
 source = (pathlib.Path(__file__).parent.parent / "app" / "scheduler.py").read_text()
 ```
 
-### IN-02: `ALERT_MIN_SEVERITY` validation prints a warning but does not log at startup when value is valid
+---
 
-**File:** `app/config.py:21-26`
-**Issue:** The validation pattern is consistent with the rest of the module, but the valid-path branch emits no startup confirmation. This is a minor observability gap — operators cannot confirm the effective value from logs without setting an invalid one. Not a bug, but worth noting for consistency with `DIGEST_HOUR` which has the same gap.
+### IN-02: `_DIGEST_HOUR_RAW = -1` sentinel in `config.py` produces a misleading fallback warning message
 
-**Fix:** Consider a single startup summary log at the end of `config.py`:
+**File:** `app/config.py:161, 163-164`
+**Issue:** When `DIGEST_HOUR` contains a non-integer value (e.g., `"noon"`), the `except ValueError` block sets `_DIGEST_HOUR_RAW = -1` as a sentinel to force the subsequent range check to produce a fallback. This prints the correct warning on the `ValueError` path (line 160), but then also triggers the range-check warning (line 164) with `DIGEST_HOUR=-1 out of range 0-23`, emitting a second, misleading log line about `-1` when the real problem was a non-integer value.
+
+**Fix:** Short-circuit the fallback directly in the `except` block, bypassing the range check:
 ```python
-print(f"Config: ALERT_MIN_SEVERITY={ALERT_MIN_SEVERITY!r}, DIGEST_ENABLED={DIGEST_ENABLED}, DIGEST_HOUR={DIGEST_HOUR}")
-```
-
-### IN-03: `_DIGEST_HOUR_RAW = -1` sentinel value is implicit
-
-**File:** `app/config.py:161`
-**Issue:** On `ValueError`, `_DIGEST_HOUR_RAW` is set to `-1` as a sentinel to force the subsequent range check to fail. This is functional but opaque — `-1` is a magic number with no comment explaining it. The `not 0 <= _DIGEST_HOUR_RAW <= 23` guard on line 163 also produces a misleading warning message (`DIGEST_HOUR=-1 out of range`) even though the actual invalid value was something non-numeric.
-
-**Fix:**
-```python
-except ValueError:
-    _raw_val = os.getenv('DIGEST_HOUR')
-    print(f"Config warning: DIGEST_HOUR={_raw_val!r} is not a valid integer, falling back to 8")
-    DIGEST_HOUR = 8  # skip range check entirely
-else:
+try:
+    _DIGEST_HOUR_RAW = int(os.getenv("DIGEST_HOUR", "8"))
     if not 0 <= _DIGEST_HOUR_RAW <= 23:
         print(f"Config warning: DIGEST_HOUR={_DIGEST_HOUR_RAW} out of range 0-23, falling back to 8")
         DIGEST_HOUR = 8
     else:
         DIGEST_HOUR = _DIGEST_HOUR_RAW
+except ValueError:
+    print(f"Config warning: DIGEST_HOUR={os.getenv('DIGEST_HOUR')!r} is not a valid integer, falling back to 8")
+    DIGEST_HOUR = 8
 ```
-This eliminates the sentinel and makes the two error paths independent.
+This eliminates the `-1` sentinel, removes the spurious second warning, and makes each error path independent.
 
 ---
 
-_Reviewed: 2026-04-12T00:00:00Z_
+_Reviewed: 2026-04-12T18:51:31Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
