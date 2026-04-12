@@ -29,9 +29,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. An existing deployment with only `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` set continues to receive critical alerts without any configuration change
   5. The `digest_events` SQLite table exists and a medium-severity event is written to it immediately on detection, surviving a container restart
 **Plans**: 3 plans
-- [ ] 01-01-PLAN.md — Config (ALERT_MIN_SEVERITY) and schema (DigestEvent model)
-- [ ] 01-02-PLAN.md — alert_router module + telegram_alerter refactor
-- [ ] 01-03-PLAN.md — Call-site wiring in log_watcher and auto_blocker
+- [x] 01-01-PLAN.md — Config (ALERT_MIN_SEVERITY) and schema (DigestEvent model)
+- [x] 01-02-PLAN.md — alert_router module + telegram_alerter refactor
+- [x] 01-03-PLAN.md — Call-site wiring in log_watcher and auto_blocker
 
 ### Phase 2: Digest Pipeline
 **Goal**: Accumulated digest events are aggregated into a well-formatted Telegram message that fits within platform limits and skips sending when there is nothing to report
