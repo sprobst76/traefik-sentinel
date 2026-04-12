@@ -15,6 +15,16 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 TELEGRAM_ENABLED = bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
 
+# Alert routing — minimum severity for immediate Telegram alerts
+# Valid values: "critical" | "high" | "medium". Default "high" preserves existing behavior
+# for deployments that only set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (ALERT-05).
+_ALERT_MIN_SEVERITY_RAW = os.getenv("ALERT_MIN_SEVERITY", "high").lower()
+if _ALERT_MIN_SEVERITY_RAW not in {"critical", "high", "medium"}:
+    print(f"Config warning: ALERT_MIN_SEVERITY={_ALERT_MIN_SEVERITY_RAW!r} invalid, falling back to 'high'")
+    ALERT_MIN_SEVERITY = "high"
+else:
+    ALERT_MIN_SEVERITY = _ALERT_MIN_SEVERITY_RAW
+
 # Intruder Detection Thresholds
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "500"))  # Higher for normal web usage
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
