@@ -145,3 +145,23 @@ RETENTION_BLOCKED_IPS_INACTIVE_DAYS = int(os.getenv("RETENTION_BLOCKED_IPS_INACT
 # When enabled, automatically report IPs to AbuseIPDB when they are blocked
 ABUSEIPDB_AUTO_REPORT = os.getenv("ABUSEIPDB_AUTO_REPORT", "true").lower() == "true"
 ABUSEIPDB_REPORT_COOLDOWN_MINUTES = int(os.getenv("ABUSEIPDB_REPORT_COOLDOWN_MINUTES", "15"))  # Min time between reports for same IP
+
+# Digest scheduling (per D-24, D-25, D-28)
+# DIGEST_ENABLED controls whether the async scheduler task starts at lifespan
+# startup. Manual /api/digest/send + /api/digest/preview remain active regardless.
+DIGEST_ENABLED = os.getenv("DIGEST_ENABLED", "true").lower() == "true"
+
+# DIGEST_HOUR is the UTC hour (0-23) at which the daily digest fires.
+# Invalid values (non-integer or out of range) fall back to 8 with a warning,
+# mirroring the ALERT_MIN_SEVERITY pattern above.
+try:
+    _DIGEST_HOUR_RAW = int(os.getenv("DIGEST_HOUR", "8"))
+except ValueError:
+    print(f"Config warning: DIGEST_HOUR={os.getenv('DIGEST_HOUR')!r} is not a valid integer, falling back to 8")
+    _DIGEST_HOUR_RAW = -1  # forces fallback in range check below
+
+if not 0 <= _DIGEST_HOUR_RAW <= 23:
+    print(f"Config warning: DIGEST_HOUR={_DIGEST_HOUR_RAW} out of range 0-23, falling back to 8")
+    DIGEST_HOUR = 8
+else:
+    DIGEST_HOUR = _DIGEST_HOUR_RAW
