@@ -28,7 +28,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Setting `ALERT_MIN_SEVERITY=critical` via environment variable restricts immediate alerts to critical events only
   4. An existing deployment with only `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` set continues to receive critical alerts without any configuration change
   5. The `digest_events` SQLite table exists and a medium-severity event is written to it immediately on detection, surviving a container restart
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 01-01-PLAN.md — Config (ALERT_MIN_SEVERITY) and schema (DigestEvent model)
+- [ ] 01-02-PLAN.md — alert_router module + telegram_alerter refactor
+- [ ] 01-03-PLAN.md — Call-site wiring in log_watcher and auto_blocker
 
 ### Phase 2: Digest Pipeline
 **Goal**: Accumulated digest events are aggregated into a well-formatted Telegram message that fits within platform limits and skips sending when there is nothing to report
@@ -59,6 +62,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation and Alert Routing | 0/TBD | Not started | - |
+| 1. Foundation and Alert Routing | 0/3 | Not started | - |
 | 2. Digest Pipeline | 0/TBD | Not started | - |
 | 3. Scheduler and Integration | 0/TBD | Not started | - |
