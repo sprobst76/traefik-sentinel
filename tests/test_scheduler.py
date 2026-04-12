@@ -90,7 +90,7 @@ def test_digest_scheduler_cancellation_propagates():
 def test_no_utcnow_in_scheduler_source():
     """app/scheduler.py must NOT contain 'utcnow' (SCHED-05 source-level guard)."""
     import pathlib
-    source = pathlib.Path("app/scheduler.py").read_text()
+    source = (pathlib.Path(__file__).parent.parent / "app" / "scheduler.py").read_text()
     assert "utcnow" not in source, (
         "app/scheduler.py must not use datetime.utcnow() — use datetime.now(UTC) instead"
     )
