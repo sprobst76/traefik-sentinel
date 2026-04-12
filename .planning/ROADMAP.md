@@ -12,9 +12,9 @@ The existing Telegram alerting fires on every detected event, causing alert fati
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation and Alert Routing** - Extend config, add digest schema, gate immediate alerts by severity
-- [ ] **Phase 2: Digest Pipeline** - Collect medium-severity events to SQLite and send structured daily digest via Telegram
-- [ ] **Phase 3: Scheduler and Integration** - Wire asyncio digest scheduler into FastAPI lifespan with configurable time and clean shutdown
+- [x] **Phase 1: Foundation and Alert Routing** - Extend config, add digest schema, gate immediate alerts by severity
+- [x] **Phase 2: Digest Pipeline** - Collect medium-severity events to SQLite and send structured daily digest via Telegram
+- [x] **Phase 3: Scheduler and Integration** - Wire asyncio digest scheduler into FastAPI lifespan with configurable time and clean shutdown
 
 ## Phase Details
 
@@ -57,8 +57,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The application starts and shuts down cleanly with no event loop errors or orphaned asyncio tasks
   4. Scheduling uses timezone-aware `datetime` with `zoneinfo`; no `datetime.utcnow()` calls appear in scheduling code
 **Plans**: 2 plans
-- [ ] 03-01-PLAN.md — Add DIGEST_ENABLED and DIGEST_HOUR to app/config.py with validation
-- [ ] 03-02-PLAN.md — Create app/scheduler.py, wire into lifespan, document env vars
+- [x] 03-01-PLAN.md — Add DIGEST_ENABLED and DIGEST_HOUR to app/config.py with validation
+- [x] 03-02-PLAN.md — Create app/scheduler.py, wire into lifespan, document env vars
 
 ## Progress
 
@@ -67,6 +67,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation and Alert Routing | 0/3 | Not started | - |
-| 2. Digest Pipeline | 0/3 | Not started | - |
-| 3. Scheduler and Integration | 0/2 | Not started | - |
+| 1. Foundation and Alert Routing | 3/3 | Complete | 2026-04-12 |
+| 2. Digest Pipeline | 3/3 | Complete | 2026-04-12 |
+| 3. Scheduler and Integration | 2/2 | Complete | 2026-04-12 |
