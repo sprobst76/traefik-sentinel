@@ -13,6 +13,7 @@ from app.blocklist import (
 )
 from app.abuseipdb import check_ip, is_configured as abuseipdb_configured
 from app.config import HONEYPOT_PATHS, HONEYPOT_INSTANT_BLOCK, WHITELISTED_IPS
+from app.alert_router import persist_to_digest
 
 
 # Cache for recent checks to avoid hitting API rate limits
@@ -122,34 +123,21 @@ async def process_intruder_event(event: dict) -> Optional[dict]:
             )
 
             if result.get("success"):
-                # Send notification
-                await notify_auto_block(ip, abuse_score, block_reason, event_count)
+                # ALERT-04: auto-block notifications go to the digest, not Telegram immediate.
+                # auto_blocker skips the router entirely (D-05); always digest with high severity.
+                blocked_ip_id = result.get("id")
+                if blocked_ip_id is not None:
+                    persist_to_digest(
+                        db,
+                        source="auto_block",
+                        source_id=blocked_ip_id,
+                        severity="high",
+                    )
                 return result
 
         return None
     finally:
         db.close()
-
-
-async def notify_auto_block(ip: str, abuse_score: int, reason: str, event_count: int):
-    """Send notification about auto-blocked IP."""
-    try:
-        from app.telegram_alerter import send_alert
-
-        message = (
-            f"🚫 *Auto-Blocked IP*\n\n"
-            f"IP: `{ip}`\n"
-            f"AbuseIPDB Score: {abuse_score}%\n"
-            f"Events (24h): {event_count}\n"
-            f"Reason: {reason}\n"
-        )
-
-        if abuse_score >= ABUSE_SCORE_PERMANENT:
-            message += "\n⚠️ *Permanent block* (score ≥80%)"
-
-        await send_alert(message)
-    except Exception as e:
-        print(f"Failed to send auto-block notification: {e}")
 
 
 def cleanup_cache():
@@ -214,47 +202,21 @@ def check_and_block_honeypot(ip: str, path: str, host: str = None) -> Optional[d
         )
 
         if result.get("success"):
-            # Send notification
-            try:
-                from app.telegram_alerter import send_alert_sync
-                message = (
-                    f"🍯 *Honeypot Block*\n\n"
-                    f"IP: `{ip}`\n"
-                    f"Path: `{path[:80]}`\n"
-                    f"Host: {host or '-'}\n\n"
-                    f"⚡ Sofort blockiert!"
-                )
-                # Use sync version since we're in sync context
-                import asyncio
+            # ALERT-04 + D-05: honeypot auto-block notifications persisted to digest, never sent immediately.
+            blocked_ip_id = result.get("id")
+            if blocked_ip_id is not None:
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.create_task(_send_honeypot_alert(ip, path, host))
-                    else:
-                        pass  # Skip notification in sync context
-                except:
-                    pass
-            except Exception as e:
-                print(f"Honeypot notification failed: {e}")
+                    persist_to_digest(
+                        db,
+                        source="auto_block",
+                        source_id=blocked_ip_id,
+                        severity="high",
+                    )
+                except Exception as e:
+                    print(f"Honeypot digest persist failed: {e}")
 
             return result
 
         return None
     finally:
         db.close()
-
-
-async def _send_honeypot_alert(ip: str, path: str, host: str = None):
-    """Send honeypot block notification."""
-    try:
-        from app.telegram_alerter import send_alert
-        message = (
-            f"🍯 *Honeypot Block*\n\n"
-            f"IP: `{ip}`\n"
-            f"Path: `{path[:80]}`\n"
-            f"Host: {host or '-'}\n\n"
-            f"⚡ Sofort blockiert!"
-        )
-        await send_alert(message)
-    except Exception as e:
-        print(f"Honeypot alert failed: {e}")
