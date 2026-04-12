@@ -9,6 +9,7 @@ from app.log_parser import parse_log_line
 from app.database import SessionLocal, AccessLog, IntruderEvent
 from app.intruder_detection import analyze_log
 from app.telegram_alerter import send_alert_sync
+from app.alert_router import route_event, persist_to_digest, get_severity
 
 
 class LogFileHandler(FileSystemEventHandler):
@@ -130,8 +131,17 @@ class LogWatcher:
                 db.add(intruder)
                 db.commit()
 
-                # Send Telegram alert (without Ollama - on-demand now)
-                send_alert_sync(event)
+                # Route the event: critical/high → immediate Telegram; medium → digest.
+                # Reuse the already-open db session (see alert_router.persist_to_digest signature).
+                if route_event(event) == "immediate":
+                    send_alert_sync(event)
+                else:
+                    persist_to_digest(
+                        db,
+                        source="intruder",
+                        source_id=intruder.id,
+                        severity=get_severity(event["reason"], event),
+                    )
 
                 # Try auto-blocking in background (async)
                 try:
