@@ -4,27 +4,14 @@ from datetime import datetime
 from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_ENABLED
 
 
-# Severity levels for different threat types
-THREAT_SEVERITY = {
-    "sql_injection": "critical",
-    "honeypot": "critical",
-    "auth_failures": "high",
-    "rate_limit": "medium",
-    "suspicious_path": "medium",
-}
+# Severity classification is owned by app.alert_router (D-01).
+# Import THREAT_SEVERITY + get_severity from the router; this module is a dumb sender.
+from app.alert_router import THREAT_SEVERITY, get_severity
 
 
 def get_severity_header(reason: str, event: dict) -> str:
-    """Generate severity-based alert header."""
-    severity = THREAT_SEVERITY.get(reason, "medium")
-    request_count = event.get("request_count", 1)
-
-    # Escalate severity based on request count
-    if request_count > 50:
-        severity = "critical"
-    elif request_count > 20 and severity == "medium":
-        severity = "high"
-
+    """Generate severity-based alert header. Delegates severity to alert_router."""
+    severity = get_severity(reason, event)
     headers = {
         "critical": "🔴🔴🔴 CRITICAL THREAT DETECTED 🔴🔴🔴",
         "high": "🟠🟠 HIGH SEVERITY ALERT 🟠🟠",
@@ -89,7 +76,7 @@ async def send_telegram_alert(event: dict) -> bool:
         message += f"\n<b>💡 Recommendation:</b>\n<i>{recommendation}</i>\n"
 
     # Add footer for critical threats
-    severity = THREAT_SEVERITY.get(reason, "medium")
+    severity = get_severity(reason, event)
     if severity == "critical" or request_count > 20:
         message += f"\n{'─' * 30}\n"
         message += f"<i>⚠️ Immediate review recommended</i>"
