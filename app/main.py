@@ -12,6 +12,7 @@ from app.config import HOST, PORT
 from app.database import init_db, SessionLocal, AccessLog, IntruderEvent, BlockedIP
 from app.log_watcher import watcher
 from app.geoip import lookup_batch, get_cached, country_code_to_flag
+from app.digest import send_digest
 
 
 @lru_cache(maxsize=1000)
@@ -755,6 +756,13 @@ async def retention_cleanup(dry_run: bool = False):
         return {"success": False, "error": str(e)}
     finally:
         db.close()
+
+
+@app.post("/api/digest/send")
+async def trigger_digest():
+    """Manually trigger digest send. Returns status dict per D-17.
+    Unauthenticated by design — operator firewalls the port (matches /api/blocklist)."""
+    return await send_digest()
 
 
 @app.get("/api/stream")
