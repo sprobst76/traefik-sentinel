@@ -31,7 +31,9 @@ def test_seconds_until_next_fire_points_to_tomorrow_when_past():
     fake_now = datetime(2024, 1, 15, 9, 5, 0, tzinfo=UTC)
 
     with patch("app.scheduler.datetime") as mock_dt:
+        # Passthrough constructor so replace() and arithmetic work on real datetime objects
         mock_dt.now.return_value = fake_now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
 
         result = _seconds_until_next_fire(8)
 
@@ -48,7 +50,9 @@ def test_seconds_until_next_fire_points_to_today_when_future():
     fake_now = datetime(2024, 1, 15, 5, 0, 0, tzinfo=UTC)
 
     with patch("app.scheduler.datetime") as mock_dt:
+        # Passthrough constructor so replace() and arithmetic work on real datetime objects
         mock_dt.now.return_value = fake_now
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
 
         result = _seconds_until_next_fire(8)
 
