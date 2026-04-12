@@ -1,59 +1,47 @@
 ---
 phase: 03-scheduler-and-integration
-fixed_at: 2026-04-12T00:00:00Z
+fixed_at: 2026-04-12T19:10:00Z
 review_path: .planning/phases/03-scheduler-and-integration/03-REVIEW.md
-iteration: 1
-findings_in_scope: 4
-fixed: 4
+iteration: 2
+findings_in_scope: 3
+fixed: 3
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 03: Code Review Fix Report
 
-**Fixed at:** 2026-04-12T00:00:00Z
+**Fixed at:** 2026-04-12T19:10:00Z
 **Source review:** .planning/phases/03-scheduler-and-integration/03-REVIEW.md
-**Iteration:** 1
+**Iteration:** 2
 
 **Summary:**
-- Findings in scope: 4 (1 Critical, 3 Warning)
-- Fixed: 4
+- Findings in scope: 3
+- Fixed: 3
 - Skipped: 0
 
 ## Fixed Issues
 
-### CR-01: `json` module used but never imported in `app/main.py`
+### WR-01: `datetime.utcnow()` used in ten places in `app/main.py`
 
 **Files modified:** `app/main.py`
-**Commit:** 4cb0392
-**Applied fix:** Added `import json` to the stdlib import block at the top of `app/main.py` (line 2, alphabetically between `asyncio` and `socket`). This resolves the `NameError: name 'json' is not defined` that would crash the SSE stream generator on every successful `queue.get()`.
+**Commit:** 2affc43
+**Applied fix:** Added `from zoneinfo import ZoneInfo` import and `_UTC = ZoneInfo("UTC")` module-level constant. Replaced all ten `datetime.utcnow()` calls with `datetime.now(_UTC).replace(tzinfo=None)` to preserve the naive-datetime contract for SQLAlchemy while eliminating the deprecated call. Affected locations: lines 65, 106, 136, 167, 266, 312, 660, 661, 662, and 718 (pre-edit line numbers).
+
+### WR-02: `RATE_LIMIT_REQUESTS` default mismatch between `config.py` (500) and operator-facing files (100)
+
+**Files modified:** `app/config.py`
+**Commit:** f7edb4a
+**Applied fix:** Changed the Python fallback in `config.py` from `"500"` to `"100"` and removed the now-inaccurate `# Higher for normal web usage` comment. `docker-compose.yml` and `.env.example` already specified `100`, so no changes were needed in those files — they were already correct.
+
+### WR-03: `RETENTION_BLOCKED_IPS_INACTIVE_DAYS` missing from `docker-compose.yml` environment block
+
+**Files modified:** `docker-compose.yml`
+**Commit:** 4e6e211
+**Applied fix:** Added `- RETENTION_BLOCKED_IPS_INACTIVE_DAYS=${RETENTION_BLOCKED_IPS_INACTIVE_DAYS:-180}` immediately after the `RETENTION_INTRUDER_EVENTS_DAYS` line in the environment block, matching the default value already defined in `config.py` and documented in `.env.example`.
 
 ---
 
-### WR-01: `datetime` mock in scheduler tests does not patch `timedelta` — tests pass for wrong reason
-
-**Files modified:** `tests/test_scheduler.py`
-**Commit:** dcbcba8
-**Applied fix:** Added `mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)` to both `test_seconds_until_next_fire_points_to_tomorrow_when_past` and `test_seconds_until_next_fire_points_to_today_when_future`. This passthrough constructor ensures that `now.replace(...)` returns a real `datetime` object (not a `MagicMock`), so the subsequent `target <= now` comparison and `(target - now).total_seconds()` arithmetic operate on real datetime values. Tests now verify the actual computed seconds rather than passing vacuously through mock comparisons.
-
----
-
-### WR-02: Bare `except:` on `VACUUM` silently swallows all errors including `KeyboardInterrupt`
-
-**Files modified:** `app/main.py`
-**Commit:** 7bbf789
-**Applied fix:** Changed `except:` to `except Exception:` in the VACUUM fallback block at line 756. Also updated the comment to be more specific about the expected failure mode (`e.g., active read transaction`). This prevents `KeyboardInterrupt`, `SystemExit`, and `GeneratorExit` from being swallowed during shutdown.
-
----
-
-### WR-03: Duplicate environment variable declarations in `docker-compose.yml` and `.env.example`
-
-**Files modified:** `docker-compose.yml`, `.env.example`
-**Commit:** 1b62704
-**Applied fix:** Removed the second duplicate `# Digest scheduling` block (lines 36-38) from `docker-compose.yml`. Removed the entire second `# DIGEST SCHEDULING (Phase 3)` section (lines 88-101) from `.env.example`. Each variable now appears exactly once in both files, with the first (more detailed, commented) declaration retained.
-
----
-
-_Fixed: 2026-04-12T00:00:00Z_
+_Fixed: 2026-04-12T19:10:00Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_
