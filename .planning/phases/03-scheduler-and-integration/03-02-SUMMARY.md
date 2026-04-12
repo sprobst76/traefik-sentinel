@@ -126,9 +126,9 @@ Digest scheduler: next fire at 2026-04-13T08:00:00.000017+00:00
 
 `tests/test_scheduler.py` — 6 tests, all passing:
 
-1. `test_seconds_until_next_fire_returns_positive` — positive float 0–86400 for all hours 0-23
-2. `test_seconds_until_next_fire_points_to_tomorrow_when_past` — at 09:05 UTC with hour=8, result ≈82500s (±60s)
-3. `test_seconds_until_next_fire_points_to_today_when_future` — at 05:00 UTC with hour=8, result ≈10800s (±60s)
+1. `test_seconds_until_next_fire_returns_positive` — positive float 0-86400 for all hours 0-23
+2. `test_seconds_until_next_fire_points_to_tomorrow_when_past` — at 09:05 UTC with hour=8, result approx 82500s (+/-60s)
+3. `test_seconds_until_next_fire_points_to_today_when_future` — at 05:00 UTC with hour=8, result approx 10800s (+/-60s)
 4. `test_digest_scheduler_is_async_coroutine` — `inspect.iscoroutinefunction(digest_scheduler)` is True
 5. `test_digest_scheduler_cancellation_propagates` — `CancelledError` raised when task cancelled
 6. `test_no_utcnow_in_scheduler_source` — source file does not contain substring "utcnow"
@@ -162,8 +162,8 @@ None. No new network endpoints, auth paths, or schema changes introduced.
 
 ### Commits exist
 
-- 238a57d: feat(03-02): add digest_scheduler asyncio coroutine with next-fire UTC timing
-- c40e76f: feat(03-02): wire digest_scheduler into lifespan with clean cancellation
-- 6ed51cf: docs(03-02): document DIGEST_ENABLED and DIGEST_HOUR in .env.example and compose
+- b4023d7: feat(03-02): add digest scheduler module with daily asyncio loop
+- 737294e: feat(03-02): wire digest scheduler into lifespan with clean shutdown
+- 8cbd37f: chore(03-02): document DIGEST_ENABLED and DIGEST_HOUR in operator config files
 
 ## Self-Check: PASSED

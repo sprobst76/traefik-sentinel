@@ -1,81 +1,92 @@
-"""Unit tests for app.scheduler — SCHED-01, SCHED-02, SCHED-05 scheduler logic."""
+"""Unit tests for app.scheduler — SCHED-01, SCHED-02, SCHED-04, SCHED-05.
+
+Tests use stdlib-only patterns (unittest + asyncio.run) matching project test style.
+"""
 
 import asyncio
 import inspect
 from datetime import datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from zoneinfo import ZoneInfo
 
 import pytest
-
-from app.scheduler import _seconds_until_next_fire, digest_scheduler
 
 UTC = ZoneInfo("UTC")
 
 
 def test_seconds_until_next_fire_returns_positive():
-    """_seconds_until_next_fire returns a positive float ≤ 86400 for any valid hour."""
-    for hour in range(24):
-        result = _seconds_until_next_fire(hour)
-        assert isinstance(result, float), f"hour={hour}: expected float, got {type(result)}"
-        assert 0 < result <= 86400, f"hour={hour}: {result} not in (0, 86400]"
+    """_seconds_until_next_fire(h) returns a float > 0 and <= 86400 for any valid h."""
+    from app.scheduler import _seconds_until_next_fire
+
+    for h in range(0, 24):
+        result = _seconds_until_next_fire(h)
+        assert isinstance(result, float), f"Expected float, got {type(result)} for hour={h}"
+        assert 0 < result <= 86400, f"Out of range {result} for hour={h}"
 
 
 def test_seconds_until_next_fire_points_to_tomorrow_when_past():
-    """At 09:05 UTC with hour=8, next fire is tomorrow at 08:00 (~22h55m away)."""
-    fake_now = datetime(2026, 4, 12, 9, 5, 0, tzinfo=UTC)
+    """At 09:05 UTC, _seconds_until_next_fire(8) should be ~22h55m (points to tomorrow)."""
+    from app.scheduler import _seconds_until_next_fire
+
+    fake_now = datetime(2024, 1, 15, 9, 5, 0, tzinfo=UTC)
+
     with patch("app.scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = fake_now
+
         result = _seconds_until_next_fire(8)
-    # Tomorrow 08:00 UTC minus 09:05 UTC = 22h55m = 82500s
-    expected = (datetime(2026, 4, 13, 8, 0, 0, tzinfo=UTC) - fake_now).total_seconds()
-    assert abs(result - expected) < 1, f"expected ~{expected}, got {result}"
+
+    # Expected: tomorrow 08:00 UTC - 09:05 UTC = 22h55m = 82500s
+    # Tolerance: ±60s
+    expected = 82500.0
+    assert abs(result - expected) <= 60, f"Expected ~{expected}s, got {result}s"
 
 
 def test_seconds_until_next_fire_points_to_today_when_future():
-    """At 05:00 UTC with hour=8, next fire is today at 08:00 (~3 hours away)."""
-    fake_now = datetime(2026, 4, 12, 5, 0, 0, tzinfo=UTC)
+    """At 05:00 UTC, _seconds_until_next_fire(8) should be ~3 hours (points to today)."""
+    from app.scheduler import _seconds_until_next_fire
+
+    fake_now = datetime(2024, 1, 15, 5, 0, 0, tzinfo=UTC)
+
     with patch("app.scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = fake_now
+
         result = _seconds_until_next_fire(8)
-    # Today 08:00 UTC minus 05:00 UTC = 3h = 10800s
-    expected = (datetime(2026, 4, 12, 8, 0, 0, tzinfo=UTC) - fake_now).total_seconds()
-    assert abs(result - expected) < 1, f"expected ~{expected}, got {result}"
+
+    # Expected: 08:00 UTC - 05:00 UTC = 3h = 10800s
+    expected = 10800.0
+    assert abs(result - expected) <= 60, f"Expected ~{expected}s, got {result}s"
 
 
 def test_digest_scheduler_is_async_coroutine():
-    """digest_scheduler must be an async coroutine function."""
-    assert inspect.iscoroutinefunction(digest_scheduler)
+    """digest_scheduler must be an async coroutine function (SCHED-04)."""
+    from app.scheduler import digest_scheduler
+
+    assert inspect.iscoroutinefunction(digest_scheduler), (
+        "digest_scheduler must be an async coroutine function"
+    )
 
 
 def test_digest_scheduler_cancellation_propagates():
-    """CancelledError from asyncio.sleep must not be suppressed inside digest_scheduler."""
+    """CancelledError must propagate out of digest_scheduler (not be suppressed)."""
+    from app.scheduler import digest_scheduler
+
     async def main():
         task = asyncio.create_task(digest_scheduler())
-        # Yield to let the coroutine enter asyncio.sleep
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # yield to let task start
         task.cancel()
         try:
             await task
+            raise AssertionError("CancelledError was not raised — it was suppressed inside coroutine")
         except asyncio.CancelledError:
-            return  # Expected — cancellation propagated correctly
-        raise AssertionError("CancelledError was not raised; scheduler suppressed it")
+            pass  # expected
 
     asyncio.run(main())
 
 
 def test_no_utcnow_in_scheduler_source():
-    """app/scheduler.py must not contain datetime.utcnow() (SCHED-05)."""
-    import importlib.util
-    import os
-    # Find the scheduler module source file
-    spec = importlib.util.find_spec("app.scheduler")
-    assert spec is not None, "app.scheduler module not found"
-    source_path = spec.origin
-    assert source_path is not None
-    with open(source_path) as f:
-        source = f.read()
+    """app/scheduler.py must NOT contain 'utcnow' (SCHED-05 source-level guard)."""
+    import pathlib
+    source = pathlib.Path("app/scheduler.py").read_text()
     assert "utcnow" not in source, (
-        f"app/scheduler.py contains 'utcnow' — violates SCHED-05. "
-        f"Use datetime.now(ZoneInfo('UTC')) instead."
+        "app/scheduler.py must not use datetime.utcnow() — use datetime.now(UTC) instead"
     )

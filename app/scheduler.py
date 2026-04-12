@@ -8,7 +8,7 @@ CancelledError from asyncio.sleep propagates to the caller (lifespan). Do not
 suppress it here — only the send_digest() call gets try/except Exception (D-23).
 
 Timezone: hardcoded UTC via zoneinfo.ZoneInfo("UTC") per D-26 and SCHED-05.
-Always use datetime.now(UTC) — never the deprecated naive UTC helper.
+Uses datetime.now(UTC) — never the deprecated UTC-naive shorthand.
 """
 
 import asyncio
