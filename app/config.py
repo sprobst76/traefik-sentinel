@@ -156,12 +156,11 @@ DIGEST_ENABLED = os.getenv("DIGEST_ENABLED", "true").lower() == "true"
 # mirroring the ALERT_MIN_SEVERITY pattern above.
 try:
     _DIGEST_HOUR_RAW = int(os.getenv("DIGEST_HOUR", "8"))
+    if not 0 <= _DIGEST_HOUR_RAW <= 23:
+        print(f"Config warning: DIGEST_HOUR={_DIGEST_HOUR_RAW} out of range 0-23, falling back to 8")
+        DIGEST_HOUR = 8
+    else:
+        DIGEST_HOUR = _DIGEST_HOUR_RAW
 except ValueError:
     print(f"Config warning: DIGEST_HOUR={os.getenv('DIGEST_HOUR')!r} is not a valid integer, falling back to 8")
-    _DIGEST_HOUR_RAW = -1  # forces fallback in range check below
-
-if not 0 <= _DIGEST_HOUR_RAW <= 23:
-    print(f"Config warning: DIGEST_HOUR={_DIGEST_HOUR_RAW} out of range 0-23, falling back to 8")
     DIGEST_HOUR = 8
-else:
-    DIGEST_HOUR = _DIGEST_HOUR_RAW
