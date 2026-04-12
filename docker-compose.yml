@@ -27,6 +27,9 @@ services:
       - WHITELISTED_IPS=${WHITELISTED_IPS:-}
       # Honeypot instant blocking
       - HONEYPOT_INSTANT_BLOCK=${HONEYPOT_INSTANT_BLOCK:-true}
+      # Digest scheduling
+      - DIGEST_ENABLED=${DIGEST_ENABLED:-true}
+      - DIGEST_HOUR=${DIGEST_HOUR:-8}
       # Log retention (days)
       - RETENTION_ACCESS_LOGS_DAYS=${RETENTION_ACCESS_LOGS_DAYS:-30}
       - RETENTION_INTRUDER_EVENTS_DAYS=${RETENTION_INTRUDER_EVENTS_DAYS:-90}
