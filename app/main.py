@@ -4,6 +4,9 @@ import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import lru_cache
+from zoneinfo import ZoneInfo
+
+_UTC = ZoneInfo("UTC")
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -62,7 +65,7 @@ async def get_stats(hours: int = Query(default=24, ge=1, le=168)):
     """Get overall statistics."""
     db = SessionLocal()
     try:
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = datetime.now(_UTC).replace(tzinfo=None) - timedelta(hours=hours)
 
         total_requests = db.query(func.count(AccessLog.id)).filter(
             AccessLog.timestamp >= since
@@ -103,7 +106,7 @@ async def get_service_stats(hours: int = Query(default=24, ge=1, le=168)):
     """Get statistics per service/router."""
     db = SessionLocal()
     try:
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = datetime.now(_UTC).replace(tzinfo=None) - timedelta(hours=hours)
 
         results = db.query(
             AccessLog.router,
@@ -133,7 +136,7 @@ async def get_host_stats(hours: int = Query(default=24, ge=1, le=168)):
     """Get statistics per host/subdomain."""
     db = SessionLocal()
     try:
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = datetime.now(_UTC).replace(tzinfo=None) - timedelta(hours=hours)
 
         results = db.query(
             AccessLog.host,
@@ -164,7 +167,7 @@ async def get_top_ips(hours: int = Query(default=24, ge=1, le=168), limit: int =
 
     db = SessionLocal()
     try:
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = datetime.now(_UTC).replace(tzinfo=None) - timedelta(hours=hours)
 
         # Query with success/error breakdown
         results = db.query(
@@ -263,7 +266,7 @@ async def get_status_stats(hours: int = Query(default=24, ge=1, le=168)):
     """Get status code distribution."""
     db = SessionLocal()
     try:
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = datetime.now(_UTC).replace(tzinfo=None) - timedelta(hours=hours)
 
         results = db.query(
             AccessLog.status,
@@ -309,7 +312,7 @@ async def get_intruders(hours: int = Query(default=24, ge=1, le=168), limit: int
 
     db = SessionLocal()
     try:
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = datetime.now(_UTC).replace(tzinfo=None) - timedelta(hours=hours)
 
         results = db.query(IntruderEvent).filter(
             IntruderEvent.timestamp >= since
@@ -657,9 +660,9 @@ async def retention_stats():
 
         # Calculate what would be deleted
         from datetime import timedelta
-        access_cutoff = datetime.utcnow() - timedelta(days=RETENTION_ACCESS_LOGS_DAYS)
-        intruder_cutoff = datetime.utcnow() - timedelta(days=RETENTION_INTRUDER_EVENTS_DAYS)
-        blocked_cutoff = datetime.utcnow() - timedelta(days=RETENTION_BLOCKED_IPS_INACTIVE_DAYS)
+        access_cutoff = datetime.now(_UTC).replace(tzinfo=None) - timedelta(days=RETENTION_ACCESS_LOGS_DAYS)
+        intruder_cutoff = datetime.now(_UTC).replace(tzinfo=None) - timedelta(days=RETENTION_INTRUDER_EVENTS_DAYS)
+        blocked_cutoff = datetime.now(_UTC).replace(tzinfo=None) - timedelta(days=RETENTION_BLOCKED_IPS_INACTIVE_DAYS)
 
         access_to_delete = db.query(func.count(AccessLog.id)).filter(
             AccessLog.timestamp < access_cutoff
@@ -715,7 +718,7 @@ async def retention_cleanup(dry_run: bool = False):
     db = SessionLocal()
     try:
         from datetime import timedelta
-        now = datetime.utcnow()
+        now = datetime.now(_UTC).replace(tzinfo=None)
 
         access_cutoff = now - timedelta(days=RETENTION_ACCESS_LOGS_DAYS)
         intruder_cutoff = now - timedelta(days=RETENTION_INTRUDER_EVENTS_DAYS)
