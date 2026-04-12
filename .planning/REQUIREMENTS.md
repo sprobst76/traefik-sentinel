@@ -62,25 +62,25 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ALERT-01 | Phase 2 | Pending |
-| ALERT-02 | Phase 2 | Pending |
+| ALERT-01 | Phase 1 | Pending |
+| ALERT-02 | Phase 1 | Pending |
 | ALERT-03 | Phase 1 | Pending |
-| ALERT-04 | Phase 2 | Pending |
+| ALERT-04 | Phase 1 | Pending |
 | ALERT-05 | Phase 1 | Pending |
-| DIGEST-01 | Phase 3 | Pending |
-| DIGEST-02 | Phase 3 | Pending |
-| DIGEST-03 | Phase 3 | Pending |
-| CONTENT-01 | Phase 4 | Pending |
-| CONTENT-02 | Phase 4 | Pending |
-| CONTENT-03 | Phase 4 | Pending |
-| CONTENT-04 | Phase 4 | Pending |
-| CONTENT-05 | Phase 4 | Pending |
-| CONTENT-06 | Phase 4 | Pending |
-| SCHED-01 | Phase 5 | Pending |
-| SCHED-02 | Phase 5 | Pending |
-| SCHED-03 | Phase 4 | Pending |
-| SCHED-04 | Phase 5 | Pending |
-| SCHED-05 | Phase 5 | Pending |
+| DIGEST-01 | Phase 1 | Pending |
+| DIGEST-02 | Phase 1 | Pending |
+| DIGEST-03 | Phase 1 | Pending |
+| CONTENT-01 | Phase 2 | Pending |
+| CONTENT-02 | Phase 2 | Pending |
+| CONTENT-03 | Phase 2 | Pending |
+| CONTENT-04 | Phase 2 | Pending |
+| CONTENT-05 | Phase 2 | Pending |
+| CONTENT-06 | Phase 2 | Pending |
+| SCHED-03 | Phase 2 | Pending |
+| SCHED-01 | Phase 3 | Pending |
+| SCHED-02 | Phase 3 | Pending |
+| SCHED-04 | Phase 3 | Pending |
+| SCHED-05 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 19 total
@@ -89,4 +89,4 @@
 
 ---
 *Requirements defined: 2026-04-12*
-*Last updated: 2026-04-12 after initial definition*
+*Last updated: 2026-04-12 after roadmap creation (consolidated from 5 phases to 3 — coarse granularity)*
