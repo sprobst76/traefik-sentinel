@@ -56,7 +56,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Setting `DIGEST_ENABLED=false` prevents the digest from sending while leaving immediate alerts unaffected
   3. The application starts and shuts down cleanly with no event loop errors or orphaned asyncio tasks
   4. Scheduling uses timezone-aware `datetime` with `zoneinfo`; no `datetime.utcnow()` calls appear in scheduling code
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 03-01-PLAN.md — Add DIGEST_ENABLED and DIGEST_HOUR to app/config.py with validation
+- [ ] 03-02-PLAN.md — Create app/scheduler.py, wire into lifespan, document env vars
 
 ## Progress
 
@@ -67,4 +69,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Foundation and Alert Routing | 0/3 | Not started | - |
 | 2. Digest Pipeline | 0/3 | Not started | - |
-| 3. Scheduler and Integration | 0/TBD | Not started | - |
+| 3. Scheduler and Integration | 0/2 | Not started | - |
