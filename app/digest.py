@@ -324,6 +324,32 @@ async def build_message(db, rows) -> tuple[str, list[int]]:
     return message, [r.id for r in rows]
 
 
+async def preview_digest() -> dict:
+    """Dry-run: build the digest message without sending or stamping sent_at.
+
+    Shares `build_message` with `send_digest` — same assembly, same truncation,
+    same escaping. Does NOT call Telegram, does NOT UPDATE digest_events,
+    does NOT commit. Safe to call repeatedly; idempotent by construction.
+    """
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(DigestEvent)
+            .filter(DigestEvent.sent_at.is_(None))
+            .all()
+        )
+        if not rows:
+            return {"event_count": 0, "message": None, "utf16_length": 0}
+        message, _ = await build_message(db, rows)
+        return {
+            "event_count": len(rows),
+            "message": message,
+            "utf16_length": _tg_len(message),
+        }
+    finally:
+        db.close()
+
+
 async def send_digest() -> dict:
     """Entry point — manually triggered (via Phase 2 endpoint) and Phase-3 scheduled.
 

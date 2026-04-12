@@ -12,7 +12,7 @@ from app.config import HOST, PORT
 from app.database import init_db, SessionLocal, AccessLog, IntruderEvent, BlockedIP
 from app.log_watcher import watcher
 from app.geoip import lookup_batch, get_cached, country_code_to_flag
-from app.digest import send_digest
+from app.digest import send_digest, preview_digest
 
 
 @lru_cache(maxsize=1000)
@@ -763,6 +763,13 @@ async def trigger_digest():
     """Manually trigger digest send. Returns status dict per D-17.
     Unauthenticated by design — operator firewalls the port (matches /api/blocklist)."""
     return await send_digest()
+
+
+@app.get("/api/digest/preview")
+async def preview_digest_endpoint():
+    """Return the assembled digest message without sending it to Telegram.
+    Read-only; does not stamp sent_at. Useful for UAT (CONTENT-05/06)."""
+    return await preview_digest()
 
 
 @app.get("/api/stream")
