@@ -33,6 +33,7 @@ services:
       # Log retention (days)
       - RETENTION_ACCESS_LOGS_DAYS=${RETENTION_ACCESS_LOGS_DAYS:-30}
       - RETENTION_INTRUDER_EVENTS_DAYS=${RETENTION_INTRUDER_EVENTS_DAYS:-90}
+      - RETENTION_BLOCKED_IPS_INACTIVE_DAYS=${RETENTION_BLOCKED_IPS_INACTIVE_DAYS:-180}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:13923/api/stats"]
       interval: 30s
