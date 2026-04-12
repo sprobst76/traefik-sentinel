@@ -8,7 +8,8 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, desc
-from app.config import HOST, PORT
+from app.config import HOST, PORT, DIGEST_ENABLED
+from app.scheduler import digest_scheduler
 from app.database import init_db, SessionLocal, AccessLog, IntruderEvent, BlockedIP
 from app.log_watcher import watcher
 from app.geoip import lookup_batch, get_cached, country_code_to_flag
@@ -30,9 +31,16 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     watcher.start()
+    scheduler_task = asyncio.create_task(digest_scheduler()) if DIGEST_ENABLED else None
     yield
     # Shutdown
     watcher.stop()
+    if scheduler_task is not None:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="Traefik Dashboard", lifespan=lifespan)
