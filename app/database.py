@@ -69,6 +69,17 @@ class BlockedIP(Base):
     auto_blocked = Column(Integer, default=0)  # 1 = auto-blocked, 0 = manual
 
 
+class DigestEvent(Base):
+    __tablename__ = "digest_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    source = Column(String(20), nullable=False)       # "intruder" | "auto_block"
+    source_id = Column(Integer, nullable=False)       # logical FK to intruder_events.id or blocked_ips.id
+    severity = Column(String(10), nullable=False)     # "critical" | "high" | "medium"
+    sent_at = Column(DateTime, nullable=True, index=True)  # NULL = pending
+
+
 def init_db():
     Base.metadata.create_all(engine)
     # Run migrations for new columns
